@@ -1,0 +1,28 @@
+{
+	"authWrongEmailOrPassword":"E-mail o contrasena incorrecta",
+	
+	"userEmailAlreadyRegistered":"E-mail ya registrado",
+	"userPasswordRequired":"Debes enviar una contrasena de al menos 8 caracteres",
+	"userEmailRequired":"Debes enviar el E-mail del usuario",
+	"userPrivRequired":"Debes enviar el privilegio del usuario",
+	
+	"tokenNotFound":"Token no encontrado",
+	"translatorNoCredits":"No tienes creditos restantes",
+	"translatorExpired":"Tus creditos han expirado",
+	"translatorError":"Error al traducir",
+	"watsonSessionIdError":"Error al traducir",
+	
+	
+	"invalidID":"ID invalido",
+	"searchError":"Error al ejecutar busqueda",
+	"emptyBodyError":"Haz enviado un cuerpo vacio",
+	"insertError":"Error al insertar",
+	"removeError":"Error al eliminar",
+	"nothingToRemove":"Nada por eliminar",
+	"updateError":"Error al actualizar",
+	"searchNoResults":"La busqueda no arrojo resultados",
+	"invalidToken":"Token invalido",
+	"fileMustBeSent":"Debes enviar los archivos",
+	"fileUploadError":"Error al subir archivos",
+	"methodNotDefined":"Metodo no definido"
+}
