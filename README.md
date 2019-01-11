@@ -1,6 +1,6 @@
 # geoSocket
 
-##ToDo
+## ToDo
 - Very High
 	- [x] Force one connection per browser
 		- [ ] Make it per device?
