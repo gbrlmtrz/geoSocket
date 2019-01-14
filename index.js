@@ -19,8 +19,6 @@ findPlaceNearby(10.415666, -71.455237, 50)
 .then( function(places){console.log(places)})
 .catch( function(){});*/
 
-
 const server = require("./src/server");
 
 server.start();
-

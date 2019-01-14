@@ -13,9 +13,11 @@
 		"keepOneConnectionPerPC": true,
 		"emitDisconnects": true,
 		"radius": 100,
-		"maxClients": 10,
-		"wantedClients": 7,
-		"clientsToDissolve": 3
+		"maxClients": 5,
+		"wantedClients": 3,
+		"clientsToDissolve": 1,
+		"commitUpdatesInSeconds": 5,
+		"updatesPerSecond": 30
 	},
 	"google": {
 		"mapsapikey": "AIzaSyAHTy8J3F0D27k1sSGyb8x9jRWc7Za6quY"

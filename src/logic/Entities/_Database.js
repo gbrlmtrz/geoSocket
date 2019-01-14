@@ -72,6 +72,7 @@ class Database{
 			
 			conn.insert(data, async (err, res) => {
 				if(err){
+					console.error(err);
 					reject(new Response(false, lang.updateError));
 				}else{
 					//await this.deleteOne(lang, data._id, data._rev);

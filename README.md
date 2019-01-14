@@ -1,6 +1,6 @@
 # geoSocket
 
-## ToDo
+## ToDo server
 - Very High
 	- [x] Force one connection per browser
 		- [ ] Make it per device?
@@ -11,8 +11,29 @@
 	- [x] Use Cloudant to save channel and geo query them
 	- [x] Use Redis to mantain socket state
 	- [x] Use Redis pub/sub as a broker between instances, so messages are properly replicated
+	- [x] Make each server responsable for mantaining the state of the channels they create
+	- [x] In case said server dies, using a hearbeat make other servers take responsability for it
+	- [x] Bottleneck the updates to redis/cloudant to avoid collisions 
 - Medium
 	- [x] Get state of a channel through redis
+	- [x] Allow server to force just one connection per browser/device/clientid
 - Low
 	- [ ] Recieve git pushes, then do a pull, then reload pm2 instance
-	- [x] Set an interval to store all states in cloudant every X minutes
+	- [x] Set an interval to store all states in cloudant every X seconds
+
+	
+## ToDo pwa
+- Very High
+	- [ ] PWA
+	- [ ] Generate ID for the browser 
+		- [ ] For the device?
+	- Optional
+		- [ ] Run it in a WebWorker?
+	- [ ] Get browser fingerprint
+- High
+	- [ ] Mobile Friendly
+	- [ ] Emoji keyboard support
+- Medium
+	- [ ] Socket connection in the WebWorker
+- Low
+	- [ ] Facebook login, just retrieve photo and name

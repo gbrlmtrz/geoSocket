@@ -56,7 +56,7 @@ const findChannelByDistance = function(lat, lon, radius){
 			}else{
 				const docs = [];
 				for(const row of response.rows){
-					docs.push({_id: row.doc._id, geometry: row.doc.state.geometry, connectedClients: (row.doc.state.connectedClients || 0), distance: calcDistance(lat, lon, row.doc.state.geometry)});
+					docs.push({_id: row.doc._id, state: row.doc.state, geometry: row.doc.state.geometry, connectedClients: (row.doc.state.connectedClients || 0), distance: calcDistance(lat, lon, row.doc.state.geometry)});
 				}
 				if(docs.length > 1)
 					docs.sort(sortByDistance);
@@ -82,7 +82,7 @@ const findChannelByIP = function(lat, lon, ip){
 			}else{
 				const docs = [];
 				for(const row of response.rows){
-					docs.push({_id: row.doc._id, geometry: row.doc.state.geometry, connectedClients: (row.doc.state.connectedClients || 0), distance: calcDistance(lat, lon, row.doc.state.geometry)});
+					docs.push({_id: row.doc._id, state: row.doc.state, geometry: row.doc.state.geometry, connectedClients: (row.doc.state.connectedClients || 0), distance: calcDistance(lat, lon, row.doc.state.geometry)});
 				}
 				
 				if(docs.length > 1)

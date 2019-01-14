@@ -12,6 +12,7 @@ const {getChannelKey, getRedis} = require("../../redis");
 const {findChannelByDistance, findChannelByIP, findPlaceNearby} = require("../channelFinder");
 const URLParser = require("url").parse;
 const uuid = require("uuid/v4");
+const update = require("./immutability-helper")
 const Ajv = require("ajv");
 const ajv = new Ajv({
     coerceTypes: true,
@@ -23,6 +24,10 @@ const sub = getRedis("subscriber");
 const Channels = new Map();
 const Events = new Map();
 const ServerName = `${os.hostname()}-${process.pid}`;
+
+const channelStates = new Map();
+const channelPatches = new Map();
+const hardUpdates = new Map();
 
 const eventSchemaValidator = ajv.compile({
 	type: "object",
@@ -75,13 +80,94 @@ const removeEvent = function(eventName){
 	return Events.delete(eventName);
 }
 
-const possiblePatterns = ["event_", "server_"];
+const possiblePatterns = ["event_", "server_", "updates_"];
+
+const getChannelCommitFunction = function(channel){
+	return function channelCommit(){
+		pub.get(`channel_${channel}`, function(err, channelState){
+			if(err){
+				console.error(err);
+				return;
+			}
+			
+			channelState = tryJSONParse(channelState);
+			
+			if(!channelState.valid){
+				console.error(channel, channelState);
+				return;
+			}
+			
+			channelState = channelState.item;
+			ChannelsEntity.updateOne({}, channelState, channelState)
+			.then(r => {
+				clearTimeout(hardUpdates.get(channel));
+				hardUpdates.delete(channel);
+			})
+			.catch(e => { 
+				console.error("ChannelsEntity.updateOne", e);
+				clearTimeout(hardUpdates.get(channel));
+				hardUpdates.delete(channel);
+			});
+		});
+	};
+};
+
+const getChannelUpdateFunction = function(key){
+	return function channelUpdate(){
+		clearTimeout(channelPatches.get(key).updates.timeout);
+		const states = channelPatches.get(key).updates;
+		channelPatches.delete(key);
+		let obj = channelStates.get(key);
+		for(const state of states){
+			obj = update(obj, {state});
+		};
+		
+		if(obj.state.connectedClients == 0){
+			pub.del(`channel_${key}`, ()=>{});
+			pub.del(`updater_${key}`, ()=>{});
+			sub.unsubscribe(`updates_${key}`, (err) => { if(err) console.error(err); });
+			if(hardUpdates.has(key)){
+				clearTimeout(hardUpdates.get(key));
+				hardUpdates.delete(key);
+			}
+			ChannelsEntity.deleteOne({}, key)
+			.then(() => {
+				console.log("Channel deleted");
+			})
+			.catch((e) => {
+				console.error("ChannelsEntity.deleteOne", e);
+			});
+		}else{	
+			channelStates.set(key, obj);
+			pub.set(`channel_${key}`, JSON.stringify(obj), (err) => {
+				if(err) console.error(err);
+				if(!hardUpdates.has(key))
+					hardUpdates.set(key, setTimeout(getChannelCommitFunction(key), config.get("channelSettings.commitUpdatesInSeconds") * 1000))
+			});	
+		}
+	};
+};
 
 const onPMessage = function(chnl, message){
 	const {channel, key} = getChannelKey(possiblePatterns, chnl);
-	const objMessage = JSON.parse(message);
+	let objMessage = tryJSONParse(message);
+	
+	if(!objMessage.valid) return;
+	
+	objMessage = objMessage.item;
 	
 	switch(channel){
+		case possiblePatterns[2]:
+			if(!channelStates.has(key)) return; 
+			if(!channelPatches.has(key)){
+				channelPatches.set(key, {
+					updates: [objMessage],
+					timeout: setTimeout( getChannelUpdateFunction(key), 1000 / config.get("channelSettings.updatesPerSecond"))
+				});
+			}else{
+				channelPatches.get(key).updates.push(objMessage);
+			}
+			break;
 		case possiblePatterns[1]:
 			switch(objMessage.command){
 				case "terminate":
@@ -92,9 +178,9 @@ const onPMessage = function(chnl, message){
 					let wsclients = it.next();
 					while(!found || !wsclients.done){
 						const ws = wsclients.value;
-						if(!found && ws.state.pcid == client){
+						if(ws.state.pcid == client){
 							found = true;
-							ws.send(JSON.stringify({event: "terminated", sender: ServerName, payload: {reason: objMessage.reason}}), err => {if(err) console.log(err)});
+							ws.send(JSON.stringify({event: "terminated", sender: ServerName, payload: {reason: objMessage.reason}}), err => {if(err) console.error(err)});
 							ws.terminate();
 						}
 						wsclients = it.next();
@@ -109,34 +195,33 @@ const onPMessage = function(chnl, message){
 				message = JSON.stringify(objMessage);
 			}
 			
-			if(Channels.has(key)){
+			if(!Channels.has(key)) return;
 				
-				switch(objMessage.event){
-					case "findSuitor":
-						for(const client of objMessage.payload.clients){
-							if(Channels.get(key).has(client)){
-								const socket = Channels.get(key).get(client);
-								findSuitor(socket);
-							}
+			switch(objMessage.event){
+				case "findSuitor":
+					for(const client of objMessage.payload.clients){
+						if(Channels.get(key).has(client)){
+							const socket = Channels.get(key).get(client);
+							findSuitor(socket);
 						}
-						break;
-					case "switchChannel":
-						for(const client of objMessage.payload.clients){
-							if(Channels.get(key).has(client)){
-								const socket = Channels.get(key).get(client);
-								socket.switch = true;
-								socket.onClose(null, null, objMessage.payload.channel);
-							}
+					}
+					break;
+				case "switchChannel":
+					for(const client of objMessage.payload.clients){
+						if(Channels.get(key).has(client)){
+							const socket = Channels.get(key).get(client);
+							socket.switch = true;
+							socket.onClose(null, null, objMessage.payload.toChannel);
 						}
-						break;
-					default:
-						Channels.get(key).forEach(function(value, key){
-							if(objMessage.sender != key){
-								value.send(message, err => {if(err) console.log(err)} );
-							}
-						});
-						break;
-				}
+					}
+					break;
+				default:
+					Channels.get(key).forEach(function(value, key){
+						if(objMessage.sender != key){
+							value.send(message, err => {if(err) console.error(err)} );
+						}
+					});
+					break;
 			}
 			break;
 	}
@@ -162,32 +247,41 @@ const loopSuitorChannels = function(socket, goodCandidate, channels){
 			goodCandidate = channel;
 		}	 
 	}
+	return goodCandidate;
 };
 
-const findSuitor = async function(socket){
+const findSuitor = function(socket){
 	let goodCandidate = null;
-	const filledChannels = new Map();
 	
-	const channelsByIP = await findChannelByIP(socket.state.lat, socket.state.lon, socket.state.ip, filledChannels);
-	
-	if(channelsByIP.length > 0){
-		goodCandidate = loopSuitorChannels(socket, goodCandidate, channelsByIP);
-		if(goodCandidate){
-			socket.switch = true;
-			socket.onClose(null, null, goodCandidate._id);
-			return;
+	const channelsByIPCB = function(channelsByIP){
+		if(channelsByIP.length > 0){
+			goodCandidate = loopSuitorChannels(socket, goodCandidate, channelsByIP);
+			if(goodCandidate){
+				socket.switch = true;
+				socket.onClose(null, null, goodCandidate._id);
+				return;
+			}
 		}
-	}
+		
+		const channelsByLatLonCB = function(channelsByLatLon){
+			if(channelsByLatLon.length > 0){
+				goodCandidate = loopSuitorChannels(socket, goodCandidate, channelsByLatLon);
+				if(goodCandidate){
+					socket.switch = true;
+					socket.onClose(null, null, goodCandidate._id);
+					return;
+				}
+			}
+		};
+		
+		findChannelByDistance(socket.state.lat, socket.state.lon, config.get("channelSettings.radius"))
+		.then( channelsByLatLonCB )
+		.catch( e => console.error("findChannelByDistance", e) );
+	};
 	
-	const channelsByLatLon = await findChannelByDistance(socket.state.lat, socket.state.lon, config.get("channelSettings.radius"));
-	if(channelsByLatLon.length > 0){
-		goodCandidate = loopSuitorChannels(socket, goodCandidate, channelsByLatLon);
-		if(goodCandidate){
-			socket.switch = true;
-			socket.onClose(null, null, goodCandidate._id);
-			return;
-		}
-	}
+	findChannelByIP(socket.state.lat, socket.state.lon, socket.state.ip)
+	.then(channelsByIPCB)
+	.catch(e => console.error("findChannelByIP", e));
 };
 
 const publish = function(channel, payload){
@@ -210,7 +304,7 @@ const getIPFromConnection = function(req){
 
 const tryJSONParse = function(item){
 	if(typeof(item) !== "string") 
-		return {valid: false, payload: item};
+		return {valid: false, item: item};
     
 	try {
         item = JSON.parse(item);
@@ -225,6 +319,31 @@ const tryJSONParse = function(item){
     return {valid: false};
 };
 
+const checkForResponsableServersHealth = function(channel, state){	
+	pub.get(`updater_${channel}`, (err, responsableServer) => {
+		if(err){
+			console.error(err);
+			return
+		}
+		
+		pub.get(`serverhb_${responsableServer}`, (err, lastHB) => {
+			if(err){
+				console.error(err);
+				return
+			}
+			
+			if(Date.now() - lastHB > config.get("socketServer.heartbeatInterval") * 2){
+				
+				sub.subscribe(`updates_${channel}`, (err, count) => { if(err) console.error(err); });
+				pub.set(`updater_${channel}`, ServerName);
+				
+				channelStates.set(channel, state);
+				
+			}
+		});
+	});
+};
+
 const onPong = function() {
 	this.isAlive = true;
 };
@@ -236,7 +355,7 @@ const onClose = function(foo, bar, toChannel){
 	
 	if(Channels.get(this.state.channel).size == 0){
 		Channels.delete(this.state.channel);
-		sub.unsubscribe(`event_${this.state.channel}`, (err) => { if(err) console.log(err); });
+		sub.unsubscribe(`event_${this.state.channel}`, (err) => { if(err) console.error(err); });
 	}
 	
 	const cName = `channel_${this.state.channel}`;
@@ -246,7 +365,7 @@ const onClose = function(foo, bar, toChannel){
 	if(config.get("channelSettings.keepOneConnectionPerPC")){
 		pub.get(`client_${this.state.pcid}`, (err, client) => {
 			if(err){
-				console.log(err);
+				console.error(err);
 				return;
 			}
 			
@@ -258,49 +377,36 @@ const onClose = function(foo, bar, toChannel){
 		});
 	}
 	
-	pub.get(cName, (err, channelState) => {
+	pub.get(cName, function(err, channelState){
 		if(err){
-			console.log(err);
+			console.error(err);
 			return;
 		}
 		
-		channelState = JSON.parse(channelState);
+		channelState = tryJSONParse(channelState);
 		
+		if(!channelState.valid){
+			console.error(cName, socketState, channelState);
+			return;
+		}
+		
+		channelState = channelState.item;
 		channelState.state.connectedClients = channelState.state.connectedClients - 1;
 		
-		if(channelState.state.connectedClients == 0){
-			pub.del(cName, ()=>{});
-			ChannelsEntity.deleteOne({}, socketState.channel)
-			.then(() => {})
-			.catch(() => {});
-		}else{
-			channelState.state.clients.splice(
-				channelState.state.clients.indexOf(socketState.id), 1);
-				
-			channelState.state.ips.splice(
-				channelState.state.ips.indexOf(socketState.ip), 1);
-			
-			channelState.state.geometry.coordinates.splice(
-				channelState.state.geometry.coordinates.indexOf([socketState.lon, socketState.lat]), 1);
-				
-			pub.set(cName, JSON.stringify(channelState), async (err) => {
-				if(err) console.log(err);
-				ChannelsEntity.updateOne({}, channelState, channelState)
-				.then(()=>{})
-				.catch(()=>{});
-			});	
-			
-			if(!toChannel && channelState.state.connectedClients <= config.get("channelSettings.clientsToDissolve")){
-				publish(socketState.channel, {event: "findSuitor", sender: ServerName, payload: {clients: channelState.state.clients}});
-			}
-		}
+		const newState = {
+			connectedClients : { $inc : -1 },
+			clients: { $pull : socketState.id },
+			ips: { $pull : socketState.ip },
+			geometry : { coordinates : {$pull: [socketState.lon, socketState.lat] } }
+		};
+		
+		pub.publish(`updates_${socketState.channel}`, JSON.stringify(newState));
 	});
 	
 	if(config.get("channelSettings.emitDisconnects"))
 		publish(this.state.channel, {event: "disconnect", sender: this.state.id, payload: {peer: this.state.id}});
 	
 	if(toChannel){
-		console.log("BUG", toChannel);
 		this.state.channel = toChannel;
 		onConnection(this);
 	}
@@ -320,7 +426,7 @@ const onMessage = function(message){
 			
 			pub.get(`channel_${this.state.channel}`, (err, channel) => {
 				if(err){
-					console.log(err);
+					console.error(err);
 					return;
 				}
 				channel = JSON.parse(channel);
@@ -365,13 +471,14 @@ const onConnection = function(socket, request){
 	if(config.get("channelSettings.keepOneConnectionPerPC")){
 		pub.get(`client_${socket.state.pcid}`, (err, client) => {
 			if(err){
-				console.log(err);
+				console.error(err);
 				return;
 			}
 			
 			if(client != null){
 				const pieces = client.split("<|>");
-				pub.publish(`server_${pieces[0]}`, JSON.stringify({command: "terminate", client: socket.state.pcid, reason: "byOtherCon"}));
+				if(pieces[0] != ServerName)
+					pub.publish(`server_${pieces[0]}`, JSON.stringify({command: "terminate", client: socket.state.pcid, reason: "byOtherCon"}));
 			}
 			
 			pub.set(`client_${socket.state.pcid}`, `${ServerName}<|>${socket.state.id}`);
@@ -379,7 +486,7 @@ const onConnection = function(socket, request){
 	}
 	
 	if(!Channels.has(socket.state.channel)){		
-		sub.subscribe(`event_${socket.state.channel}`, (err, count) => { if(err) console.log(err); });
+		sub.subscribe(`event_${socket.state.channel}`, (err, count) => { if(err) console.error(err); });
 		Channels.set(socket.state.channel, new Map());
 	}
 	
@@ -391,7 +498,7 @@ const onConnection = function(socket, request){
 	
 	pub.get(`channel_${socket.state.channel}`, (err, channel) => {
 		if(err){
-			console.log(err);
+			console.error(err);
 			return;
 		}
 		
@@ -410,10 +517,16 @@ const onConnection = function(socket, request){
 		
 		socket.send(JSON.stringify({event: "channel", sender: ServerName, payload: {channel: pChannel}}));
 		
-		pub.set(`channel_${socket.state.channel}`, JSON.stringify(channel), async (err) => {
-			if(err) console.log(err);
-			const response = await ChannelsEntity.updateOne({}, channel, channel);
-		});
+		const newState = {
+			connectedClients : { $inc : 1 },
+			clients: { $push : [socket.state.id] },
+			ips: { $push : [socket.state.ip] },
+			geometry : { coordinates : { $push: [[socket.state.lon, socket.state.lat]] } }
+		};
+		
+		pub.publish(`updates_${socket.state.channel}`, JSON.stringify(newState));
+		
+		checkForResponsableServersHealth(socket.state.channel, channel);
 	});
 	
 	socket.onClose = onClose;
@@ -426,80 +539,96 @@ const getRandom = function(list){
 	return list[Math.floor((Math.random()*list.length))];
 };
 
-const createChannel = async function(query, filledChannels, cb){
-	const placesNearby = await findPlaceNearby(query.lat, query.lon, config.get("channelSettings.radius"));
+const createChannel = function(query, filledChannels, cb){
 	
-	let goodPlace = null;
-	if(placesNearby.length > 0){
-		if(placesNearby[0].distance < config.get("channelSettings.radius"))
-			goodPlace = placesNearby[0];
-	}
-	
-	const Channel = {
-		_id: query.channel || uuid(),
-		type: "Feature",
-		collection: "channels",
-		created: Date.now(),
-		state: {
-			connectedClients: 0,
-			ips: [],
-			clients: [],
-			geometry: {
-				type: "MultiPoint",
-				coordinates: []
-			}
+	const findPlaceNearbyCB = function(placesNearby){
+		let goodPlace = null;
+		if(placesNearby.length > 0){
+			if(placesNearby[0].distance < config.get("channelSettings.radius"))
+				goodPlace = placesNearby[0];
 		}
-	};
-	
-	if(goodPlace){
-		Channel.state.channelName = goodPlace.name;
-		Channel.state.geometry.coordinates.push(goodPlace.geometry.coordinates);
-	}
-	
-	const response = await ChannelsEntity.insertOne({}, Channel);
-	if(response.success){
-		pub.set(`channel_${Channel._id}`, JSON.stringify(Channel), (err) => {
-			if(err){
-				console.log(err);
+		
+		const Channel = {
+			_id: query.channel || uuid(),
+			type: "Feature",
+			collection: "channels",
+			created: Date.now(),
+			state: {
+				connectedClients: 0,
+				ips: [],
+				clients: [],
+				geometry: {
+					type: "MultiPoint",
+					coordinates: []
+				}
+			}
+		};
+		
+		if(goodPlace){
+			Channel.state.channelName = goodPlace.name;
+			Channel.state.geometry.coordinates.push(goodPlace.geometry.coordinates);
+		}	
+		
+		const ChannelEntityCB = function(response){
+			if(!response.success){
 				cb(false);
 				return;
 			}
-			query.channel = Channel._id;
-			cb(true);
 			
-			if(filledChannels.size > 0){
-				if(filledChannels.size > (config.get("channelSettings.wantedClients")-1)){
-					const values = filledChannels.values();
-					for(const i = 0; i < (config.get("channelSettings.wantedClients")-1); i++){
-						const {_id, state} = values.next().value;
-						const client = getRandom(state.clients);
-						publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel._id, clients: [client._id]}});
-					}
-				}else{
-					const it = filledChannels.values();
-					let chn = it.next();
-					let needed = config.get("channelSettings.wantedClients")-1
-					while(!chn.done || needed > 0){
-						const {_id, state} = chn.value;
-						const available = Math.abs(state.connectedClients - needed);
-						const clientsToSwitch = [];
-						for(let i = 0; i < available; i++){
-							let client;
-							do{
-								client = getRandom(state.clients);
-							}while(clientsToSwitch.indexOf(client) >= 0);
-							clientsToSwitch.push(client);
+			pub.set(`channel_${Channel._id}`, JSON.stringify(Channel), (err) => {
+				if(err){
+					console.error(err);
+					cb(false);
+					return;
+				}
+				
+				sub.subscribe(`updates_${Channel._id}`, (err, count) => { if(err) console.error(err); });
+				pub.set(`updater_${Channel._id}`, ServerName);
+				
+				channelStates.set(Channel._id, Channel);
+				query.channel = Channel._id;
+				cb(true);
+				
+				if(filledChannels.size > 0){
+					if(filledChannels.size > (config.get("channelSettings.wantedClients")-1)){
+						const values = filledChannels.values();
+						for(let i = 0; i < (config.get("channelSettings.wantedClients")-1); i++){
+							const {_id, state} = values.next().value;
+							const client = getRandom(state.clients);
+							publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel._id, clients: [client._id]}});
 						}
-						needed = needed - clientsToSwitch.length;
-						publish(_id, {event: "switchChannel", sender:ServerName, payload:{toChannel: Channel._id, clients: clientsToSwitch}});
-						chn = it.next();
+					}else{
+						const it = filledChannels.values();
+						let chn = it.next();
+						let needed = config.get("channelSettings.wantedClients")-1
+						while(!chn.done || needed > 0){
+							const {_id, state} = chn.value;
+							const available = Math.abs(state.connectedClients - needed);
+							const clientsToSwitch = [];
+							for(let i = 0; i < available; i++){
+								let client;
+								do{
+									client = getRandom(state.clients);
+								}while(clientsToSwitch.indexOf(client) >= 0);
+								clientsToSwitch.push(client);
+							}
+							needed = needed - clientsToSwitch.length;
+							publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel._id, clients: clientsToSwitch}});
+							chn = it.next();
+						}
 					}
 				}
-			}
-		});
-	}else{
-		cb(false);
-	}
+			});
+		};
+		
+		ChannelsEntity.insertOne({}, Channel)
+		.then(ChannelEntityCB)
+		.catch( e => console.error("ChannelsEntity.insertOne", e));		
+	};
+	
+	findPlaceNearby(query.lat, query.lon, config.get("channelSettings.radius"))
+	.then( findPlaceNearbyCB )
+	.catch( e => console.error("findPlaceNearby", e));
 };
 
 const loopChannels = function(query, goodCandidate, channels, filledChannels){
@@ -520,38 +649,47 @@ const loopChannels = function(query, goodCandidate, channels, filledChannels){
 			goodCandidate = channel;
 		}	 
 	}
+	return goodCandidate;
 };
 
-const findChannel = async function(query, cb){
+const findChannel = function(query, cb){
 	let goodCandidate = null;
 	const filledChannels = new Map();
 	
-	const channelsByIP = await findChannelByIP(query.lat, query.lon, query.ip, filledChannels);
-	
-	if(channelsByIP.length > 0){
-		goodCandidate = loopChannels(query, goodCandidate, channelsByIP);
-		if(query.channel){
-			cb(true);
-			return;
+	const channelsByIPCB = function(channelsByIP){
+		if(channelsByIP.length > 0){
+			goodCandidate = loopChannels(query, goodCandidate, channelsByIP, filledChannels);
+			if(query.channel){
+				cb(true);
+				return;
+			}
 		}
-	}
+		
+		const channelsByLatLonCB = function(channelsByLatLon){
+			if(channelsByLatLon.length > 0){
+				goodCandidate = loopChannels(query, goodCandidate, channelsByLatLon, filledChannels);
+				if(query.channel){
+					cb(true);
+					return;
+				}
+			}
+			
+			if(goodCandidate){
+				query.channel = goodCandidate._id;
+				cb(true);
+			}else{
+				createChannel(query, filledChannels, cb);
+			}
+		};
+		
+		findChannelByDistance(query.lat, query.lon, config.get("channelSettings.radius"))
+		.then(channelsByLatLonCB)
+		.catch(e => console.error("findChannelByDistance", e));
+	};
 	
-	const channelsByLatLon = await findChannelByDistance(query.lat, query.lon, config.get("channelSettings.radius"));
-	if(channelsByLatLon.length > 0){
-		goodCandidate = loopChannels(query, goodCandidate, channelsByLatLon);
-		if(query.channel){
-			cb(true);
-			return;
-		}
-	}
-	
-	if(goodCandidate){
-		query.channel = goodCandidate._id;
-		cb(true);
-	}else{
-		console.log("create channel");
-		createChannel(query, filledChannels, cb);
-	}
+	findChannelByIP(query.lat, query.lon, query.ip)
+	.then(channelsByIPCB)
+	.catch(e => console.error("findChannelByIP", e));
 };
 
 const clientVerifier = function(info, cb){
@@ -609,14 +747,16 @@ const eachClient = function(ws){
 };
 
 const ping = function() {
+	pub.set(`serverhb_${ServerName}`, Date.now());
 	wss.clients.forEach(eachClient);
 };
 
 const start = function(){
-	if(!wss) throw new Error("WSS has'nt been sent");
+	if(!wss) throw new Error("WSS hasn't been sent");
 	wss.on("connection", onConnection);
 	sub.on("message", onPMessage);
-	sub.subscribe(`server_${ServerName}`, (err, count) => { if(err) console.log(err); });
+	pub.set(`serverhb_${ServerName}`, Date.now());
+	sub.subscribe(`server_${ServerName}`, (err, count) => { if(err) console.error(err); });
 	pingInterval = setInterval(ping, config.get("socketServer.heartbeatInterval"));
 };
 
