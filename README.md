@@ -16,7 +16,6 @@
 	- [x] Bottleneck the updates to redis/cloudant to avoid collisions 
 - Medium
 	- [x] Get state of a channel through redis
-	- [x] Allow server to force just one connection per browser/device/clientid
 - Low
 	- [ ] Recieve git pushes, then do a pull, then reload pm2 instance
 	- [x] Set an interval to store all states in cloudant every X seconds

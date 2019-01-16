@@ -35,6 +35,7 @@
     "fastparallel": "^2.3.0",
     "fastq": "^1.6.0",
     "fastseries": "^1.7.2",
+    "fingerprintjs2": "^2.0.6",
     "hashids": "^1.2.2",
     "immutability-helper": "^2.9.0",
     "ioredis": "^4.3.0",

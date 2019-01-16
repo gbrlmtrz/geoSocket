@@ -98,6 +98,13 @@ const getChannelCommitFunction = function(channel){
 			}
 			
 			channelState = channelState.item;
+			
+			if(channelState.state.connectedClients <= config.get("channelSettings.clientsToDissolve")){
+				console.log("DISOLVE ME");
+				publish(channel, {event: "findSuitor", sender: ServerName, payload: {clients: channelState.state.clients}});
+			}
+				
+				
 			ChannelsEntity.updateOne({}, channelState, channelState)
 			.then(r => {
 				clearTimeout(hardUpdates.get(channel));
@@ -407,7 +414,8 @@ const onClose = function(foo, bar, toChannel){
 		publish(this.state.channel, {event: "disconnect", sender: this.state.id, payload: {peer: this.state.id}});
 	
 	if(toChannel){
-		this.state.channel = toChannel;
+		this.state.channel = toChannel;		
+		this.send(JSON.stringify({event: "channelSwitch", sender: ServerName, payload: {toChannel: toChannel}}));
 		onConnection(this);
 	}
 };
