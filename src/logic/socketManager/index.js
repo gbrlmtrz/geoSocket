@@ -1,6 +1,10 @@
 "use strict";
 let wss;
 let pingInterval;
+const pako = require('pako');
+const str2ab = require('string-to-arraybuffer');
+const ab2str = require('arraybuffer-to-string');
+const BSON = require('bson');
 const isValidCoordinates = require('is-valid-coordinates');
 const os = require('os');
 const {Server} = require("ws");
@@ -51,6 +55,23 @@ const noop = function(){};
 
 const eventNooper = function(socketState, channelState, event, cb){ cb(true, socketState, channelState, event); };
 
+const serializeAndCompress = function(obj){
+	let arrBuff = BSON.serialize(obj);
+	return pako.deflate(arrBuff, {level : 9});
+};
+
+const binStringToObject = function(str){
+	let arrBuff = str2ab(str);
+	const uint8Array  = new Uint8Array(arrBuff);
+	const res = BSON.deserialize(uint8Array);
+	return res;
+};
+
+const ObjectToBinString = function(obj){
+	let arrBuff = BSON.serialize(obj);
+	return ab2str(arrBuff, "binary");
+};
+
 const addEvent = function(eventName, event){
 	
 	if(typeof(eventName) != "string")
@@ -69,6 +90,7 @@ const addEvent = function(eventName, event){
 		validator: ajv.compile(event.schema),
 		echo: event.echo || false,
 		publish: event.publish || false,
+		toOne: event.toOne || false,
 		persists: event.persists || false,
 		eventHandler: event.eventHandler || eventNooper
 	};
@@ -78,7 +100,7 @@ const addEvent = function(eventName, event){
 
 const removeEvent = function(eventName){
 	return Events.delete(eventName);
-}
+};
 
 const possiblePatterns = ["event_", "server_", "updates_"];
 
@@ -99,8 +121,7 @@ const getChannelCommitFunction = function(channel){
 			
 			channelState = channelState.item;
 			
-			if(channelState.state.connectedClients <= config.get("channelSettings.clientsToDissolve")){
-				console.log("DISOLVE ME");
+			if(channelState.state.connectedClients > 0 && channelState.state.connectedClients <= config.get("channelSettings.clientsToDissolve")){
 				publish(channel, {event: "findSuitor", sender: ServerName, payload: {clients: channelState.state.clients}});
 			}
 				
@@ -139,12 +160,11 @@ const getChannelUpdateFunction = function(key){
 			}
 			ChannelsEntity.deleteOne({}, key)
 			.then(() => {
-				console.log("Channel deleted");
 			})
 			.catch((e) => {
 				console.error("ChannelsEntity.deleteOne", e);
 			});
-		}else{	
+		}else{
 			channelStates.set(key, obj);
 			pub.set(`channel_${key}`, JSON.stringify(obj), (err) => {
 				if(err) console.error(err);
@@ -157,15 +177,18 @@ const getChannelUpdateFunction = function(key){
 
 const onPMessage = function(chnl, message){
 	const {channel, key} = getChannelKey(possiblePatterns, chnl);
-	let objMessage = tryJSONParse(message);
 	
-	if(!objMessage.valid) return;
-	
-	objMessage = objMessage.item;
-	
+	let objMessage;
 	switch(channel){
 		case possiblePatterns[2]:
+			objMessage = tryJSONParse(message);
+	
+			if(!objMessage.valid) return;
+			
+			objMessage = objMessage.item;
+		
 			if(!channelStates.has(key)) return; 
+			
 			if(!channelPatches.has(key)){
 				channelPatches.set(key, {
 					updates: [objMessage],
@@ -176,7 +199,16 @@ const onPMessage = function(chnl, message){
 			}
 			break;
 		case possiblePatterns[1]:
+			objMessage = tryJSONParse(message);
+	
+			if(!objMessage.valid) return;
+			
+			objMessage = objMessage.item;
+		
 			switch(objMessage.command){
+				case "sendEvent":
+					findAndSend(objMessage.toClient, objMessage.payload);
+					break;
 				case "terminate":
 				default:
 					const client = objMessage.client;
@@ -187,7 +219,7 @@ const onPMessage = function(chnl, message){
 						const ws = wsclients.value;
 						if(ws.state.pcid == client){
 							found = true;
-							ws.send(JSON.stringify({event: "terminated", sender: ServerName, payload: {reason: objMessage.reason}}), err => {if(err) console.error(err)});
+							ws.send(serializeAndCompress({event: "terminated", sender: ServerName, payload: {reason: objMessage.reason}}), err => {if(err) console.error(err)});
 							ws.terminate();
 						}
 						wsclients = it.next();
@@ -197,9 +229,10 @@ const onPMessage = function(chnl, message){
 			break;
 		case possiblePatterns[0]:
 		default:
+			objMessage = binStringToObject(message);
+			
 			if(config.get("devMode")){
 				objMessage.repeater = ServerName;
-				message = JSON.stringify(objMessage);
 			}
 			
 			if(!Channels.has(key)) return;
@@ -223,9 +256,10 @@ const onPMessage = function(chnl, message){
 					}
 					break;
 				default:
+					const srz = serializeAndCompress(objMessage);
 					Channels.get(key).forEach(function(value, key){
 						if(objMessage.sender != key){
-							value.send(message, err => {if(err) console.error(err)} );
+							value.send(srz, err => {if(err) console.error(err)} );
 						}
 					});
 					break;
@@ -295,7 +329,42 @@ const publish = function(channel, payload){
 	if(config.get("devMode"))
 		payload.emiter = ServerName;
 	
-	pub.publish(`event_${channel}`, JSON.stringify(payload));
+	pub.publish(`event_${channel}`, ObjectToBinString(payload));
+};
+
+const findAndSend = function(toClient, payload){	
+	const it = wss.clients.values();
+	let found = false;
+	let wsclients = it.next();
+	while(!found || !wsclients.done){
+		const ws = wsclients.value;
+		if(ws.state.pcid == toClient){
+			found = true;
+			ws.send(serializeAndCompress(payload), err => {if(err) console.error(err)});
+		}
+		wsclients = it.next();
+	}
+};
+
+const publishToOne = function(toClient, payload){
+	if(config.get("devMode"))
+		payload.emiter = ServerName;
+	
+	pub.get(`client_${toClient}`, (err, client) => {
+		if(err){
+			console.error(err);
+			return;
+		}
+		
+		if(client != null){
+			const pieces = client.split("<|>");
+			if(pieces[0] != ServerName){
+				pub.publish(`server_${pieces[0]}`, JSON.stringify({command: "sendEvent", toClient, payload}));
+			}else{
+				findAndSend(toClient, payload);
+			}
+		}
+	});
 };
 
 const getIPFromConnection = function(req){
@@ -406,7 +475,6 @@ const onClose = function(foo, bar, toChannel){
 			ips: { $pull : socketState.ip },
 			geometry : { coordinates : {$pull: [socketState.lon, socketState.lat] } }
 		};
-		
 		pub.publish(`updates_${socketState.channel}`, JSON.stringify(newState));
 	});
 	
@@ -415,17 +483,38 @@ const onClose = function(foo, bar, toChannel){
 	
 	if(toChannel){
 		this.state.channel = toChannel;		
-		this.send(JSON.stringify({event: "channelSwitch", sender: ServerName, payload: {toChannel: toChannel}}));
+		this.send(serializeAndCompress({event: "channelSwitch", sender: ServerName, payload: {toChannel: toChannel}}));
 		onConnection(this);
 	}
 };
 
+
+const simplify = function(object){
+	return [object.event, object.payload, object.sender];
+};
+
+const restore = function(array){
+	let n = {event: array['0'], payload: array['1'], sender: array['2']};
+	return n;
+};
+
+const decompressIncoming = function(message){
+	let decompressed = pako.inflate(message);
+	let des = BSON.deserialize(decompressed);
+	return des;
+};
+
 const onMessage = function(message){
-	message = tryJSONParse(message);
+	if(!(message instanceof Buffer) && !(message instanceof Uint8Array) && !(message instanceof ArrayBuffer))
+		return;
 	
-	if(!message.valid) return;
+	try{
+		message = decompressIncoming(message);
+	}catch(e){
+		console.log(e);
+		return;
+	}
 	
-	message = message.item;
 	message.sender = this.state.id;
 	
 	if(eventSchemaValidator(message) && Events.has(message.event)){
@@ -448,11 +537,14 @@ const onMessage = function(message){
 					if(JSON.stringify(channelState.state) !== JSON.stringify(channelState))
 						channel.state = channelState;
 					
+					if(event.toOne && payload.to)
+						publishToOne(payload.to, payload);
+					
 					if(event.publish)
 						publish(this.state.channel, payload);
 					
 					if(event.echo)
-						this.send(JSON.stringify(payload));
+						this.send(serializeAndCompress(payload));
 				};
 				
 				event.eventHandler(objectCopy(this.state), objectCopy(channel.state), message, eventHandlerCB);
@@ -523,7 +615,9 @@ const onConnection = function(socket, request){
 		delete pChannel.ips;
 		delete pChannel.geometry;
 		
-		socket.send(JSON.stringify({event: "channel", sender: ServerName, payload: {channel: pChannel}}));
+		let sed = serializeAndCompress({event: "channel", sender: ServerName, payload: {channel: pChannel}});
+		
+		socket.send(sed);
 		
 		const newState = {
 			connectedClients : { $inc : 1 },

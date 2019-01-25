@@ -4,19 +4,19 @@ const fastify = require('fastify');
 const path = require('path');
 const schemas = require('../logic/schemas');
 const entities = require('../logic/Entities');
-const {existsSync, readdirSync} = require('fs');
+const {existsSync, readdirSync, readFileSync} = require('fs');
 const routeTransformer = require('./utils/routeTransformer');
 const authMaker = require('./utils/authMaker');
 const autoauth = require('./preHandlers/autoauth');
 
 const app = fastify({
 	//logger: true,
-	/*http2: true,
+	http2: true,
 	https: {
-		allowHTTP1: true, // fallback support for HTTP1
-		key: fs.readFileSync(path.join(__dirname, 'cert', 'ssl.key')),
-		cert: fs.readFileSync(path.join(__dirname, 'cert', 'ssl.cert'))
-	}*/
+		allowHTTP1: true, 
+		key: readFileSync(path.join(__dirname, '..', '..', 'ssl', 'server.key')),
+		cert: readFileSync(path.join(__dirname, '..', '..', 'ssl', 'server.crt'))
+	}
 });
 
 //app.register(require('fastify-ws'));

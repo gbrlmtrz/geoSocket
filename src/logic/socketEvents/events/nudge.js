@@ -4,7 +4,7 @@ const payload = {
 	additionalProperties: false,
 	required: ["name"],
 	properties: {
-		nudge: {
+		n: {
 			type: "string"
 		}
 	}

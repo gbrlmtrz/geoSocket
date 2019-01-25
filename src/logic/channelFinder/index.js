@@ -56,7 +56,8 @@ const findChannelByDistance = function(lat, lon, radius){
 			}else{
 				const docs = [];
 				for(const row of response.rows){
-					docs.push({_id: row.doc._id, state: row.doc.state, geometry: row.doc.state.geometry, connectedClients: (row.doc.state.connectedClients || 0), distance: calcDistance(lat, lon, row.doc.state.geometry)});
+					if(row.doc)
+						docs.push({_id: row.doc._id, state: row.doc.state, geometry: row.doc.state.geometry, connectedClients: (row.doc.state.connectedClients || 0), distance: calcDistance(lat, lon, row.doc.state.geometry)});
 				}
 				if(docs.length > 1)
 					docs.sort(sortByDistance);
@@ -70,6 +71,7 @@ const findChannelByDistance = function(lat, lon, radius){
 const findChannelByIP = function(lat, lon, ip){
 	return new Promise(function(resolve, reject){
 		
+				return resolve([]);
 		db.search('channel', 'ipchannel', {
 			q: `ip:${ip}`,
 			include_docs: true

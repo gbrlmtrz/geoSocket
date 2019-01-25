@@ -4,10 +4,10 @@ const payload = {
 	additionalProperties: false,
 	required: ["name"],
 	properties: {
-		name: {
+		a: {
 			type: "string"
 		},
-		avatar: {
+		a: {
 			type: "number",
 			default: 0
 		}
