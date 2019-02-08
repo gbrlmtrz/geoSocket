@@ -1,11 +1,74 @@
-<!--The content below is only a placeholder and can be replaced.-->
-<div style="text-align:center">
-  <h1>
-    Welcome to {{ title }}!
-  </h1>
-  <img width="300" alt="Angular Logo" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTAgMjUwIj4KICAgIDxwYXRoIGZpbGw9IiNERDAwMzEiIGQ9Ik0xMjUgMzBMMzEuOSA2My4ybDE0LjIgMTIzLjFMMTI1IDIzMGw3OC45LTQzLjcgMTQuMi0xMjMuMXoiIC8+CiAgICA8cGF0aCBmaWxsPSIjQzMwMDJGIiBkPSJNMTI1IDMwdjIyLjItLjFWMjMwbDc4LjktNDMuNyAxNC4yLTEyMy4xTDEyNSAzMHoiIC8+CiAgICA8cGF0aCAgZmlsbD0iI0ZGRkZGRiIgZD0iTTEyNSA1Mi4xTDY2LjggMTgyLjZoMjEuN2wxMS43LTI5LjJoNDkuNGwxMS43IDI5LjJIMTgzTDEyNSA1Mi4xem0xNyA4My4zaC0zNGwxNy00MC45IDE3IDQwLjl6IiAvPgogIDwvc3ZnPg==">
-</div>
-<video id="video"></video>
-<img *ngFor="let picture of pictures" [src]="picture"/>
+<div class="mContainer" [class.isPortrait]="isPortrait">
+	<mat-toolbar color="primary" class="mToolbar">
+		<mat-toolbar-row>
+			<button [matBadge]="Users.size"  matBadgePosition="below after" [matBadgeHidden]="Users.size == 0" matBadgeColor="accent" mat-icon-button *ngIf="isPortrait" (click)="snav.toggle()">
+				<mat-icon>contacts</mat-icon>
+			</button>
+			<h1 class="title">{{ Lang.lang.app.title }} {{ Channel.channelName ? '@ '+Channel.channelName : ''}}</h1>
+			<span class="mToolbarSpacer"></span>
+			<button mat-icon-button>
+				<mat-icon *ngIf="isOnline">share</mat-icon>
+			</button>
+			<mat-icon *ngIf="!isOnline">signal_wifi_off</mat-icon>
+			<button mat-icon-button [matMenuTriggerFor]="menu">
+				<mat-icon>more_vert</mat-icon>
+			</button>
+			<mat-menu #menu="matMenu">
+				<button mat-menu-item (click)="openNamePickerDialog()">{{Lang.lang.app.changeName}}</button>
+				<mat-divider></mat-divider>
+				<button mat-menu-item (click)="exit()">{{Lang.lang.app.exit}}</button>
+			</mat-menu>
+		</mat-toolbar-row>
+	</mat-toolbar>
+	
+	<mat-sidenav-container class="sidenavContainer" [class.nudge]="nudging">
+		<mat-sidenav #snav [style.width]="width" [fixedInViewport]="isPortrait" [mode]="isPortrait ? 'over' : 'side'" [opened]="isLandscape" [disableClose]="isLandscape">
+			<mat-nav-list>
+				<connected-peer *ngFor="let user of Users | keyvalue" [user]="user.value" (calling)="sendCall($event)" (nudging)="sendNudge($event)"></connected-peer>
+			</mat-nav-list>
+		</mat-sidenav>
 
-<router-outlet></router-outlet>
+		<mat-sidenav-content id="chat">
+			<div id="history">
+				<message *ngFor="let message of Messages" (quote)="quoting($event)" [message]="message" [style.align-self]="message.byMe ? 'flex-end' : 'flex-start'"></message>
+			</div>
+			<div id="keyboard">
+				<div id="visualKeyboard" [class.quoteO]="Quote != null">					
+					<div id="quote" *ngIf="messagePayload.media != null || Quote != null">
+						<div class="quoteSpacer" *ngIf="messagePayload.media == null"></div>
+						<div id="audioPreview" *ngIf="messagePayload.media">
+							<audio #audio [src]="audioBlobURL"></audio>
+							<button mat-icon-button (click)="audio.paused ? audio.play() : audio.pause()" type="button">
+								<mat-icon *ngIf="audio.paused">play_circle_outline</mat-icon>
+								<mat-icon *ngIf="!audio.paused">pause_circle_outline</mat-icon>
+							</button>
+						</div>
+						<quote *ngIf="Quote != null" [message]="Quote"></quote>
+						<button *ngIf="Quote != null" mat-icon-button type="button" (click)="Quote = null">
+							<mat-icon>clear</mat-icon>
+						</button>
+						<div class="quoteSpacer" *ngIf="Quote == null"></div>
+					</div>
+					<form id="text" #mForm="ngForm" (ngSubmit)="sendMessage()">
+						<button mat-icon-button *ngIf="isLandscape">
+							<mat-icon>mood</mat-icon>
+						</button>
+						<div id="inputarea">
+							<div id="inputPlaceholder" [style.visibility]="!messagePayload.message || messagePayload.message.length == 0 ? 'visible' : 'hidden'">
+								{{Lang.lang.app.typeYourMessage}}
+							</div>
+							<div id="input" contenteditable="true" name="messagePayload.message" (keydown)="onKeydown($event)" [(ngModel)]="messagePayload.message" spellcheck="true"></div>
+						</div>
+						<button mat-icon-button type="submit">
+							<mat-icon>send</mat-icon>
+						</button>
+					</form>
+				</div>
+				<button mat-fab (click)="toggleRecording()" (press)="startRecording()" (pressup)="stopRecording()" color="accent">
+					<mat-icon [style.display]="Media.isRecordingAudio ? 'none' : 'inline-block'">mic</mat-icon>
+					<mat-icon [style.display]="Media.isRecordingAudio ? 'inline-block' : 'none'" class="rec">stop</mat-icon>
+				</button>
+			</div>
+		</mat-sidenav-content>
+	</mat-sidenav-container>
+</div>

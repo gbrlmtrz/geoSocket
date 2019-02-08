@@ -25,9 +25,16 @@
 	<meta itemprop="image" content="https://sixdegreesnear.com/assets/icons/icon-144x144.png">
 	<meta name="twitter:title" content="SixDegreesNear">
 	<meta name="twitter:description" content="Get in touch with people near you!">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
 </head>
 <body>
 	<app-root></app-root>
 	<noscript>Please enable JavaScript to continue using this application.</noscript>
+	<script>
+	  setTimeout(function(){
+		  var css = ["https://fonts.googleapis.com/icon?family=Material+Icons"];
+		  for(var i = 0; i < css.length; i++){var cssLink = document.createElement('link'); cssLink.href = css[i]; cssLink.rel = 'stylesheet'; document.head.appendChild(cssLink);}
+		},200);
+	</script>
 </body>
 </html>

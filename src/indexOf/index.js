@@ -26,9 +26,7 @@ module.exports = function indexOf(array, member, fromIndex) {
 					return i; // all else
 		}else{
 			for(; i !== Len; ++i){
-				if(isArray && Array.isArray(that[i])){
-					if(deepEqual(member, that[i])) return i;
-				}
+				if(deepEqual(member, that[i])) return i;
 			}	
 		}
 	}

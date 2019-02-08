@@ -1,1 +1,55 @@
-/* You can add global styles to this file, and also import other style files */
+//@import "~@angular/material/prebuilt-themes/indigo-pink.css";
+@import "_variables";
+@import "~bootstrap/scss/functions";
+@import "~bootstrap/scss/variables";
+@import "~bootstrap/scss/mixins";
+@import "~bootstrap/scss/reboot";
+@import "~bootstrap/scss/grid";
+@import "~bootstrap/scss/utilities";
+@import "_reset";
+
+@import '~@angular/material/theming';
+@include mat-core();
+$primary: mat-palette($mat-pink, 800);
+$accent:  mat-palette($mat-blue-grey, 400);
+$warn:    mat-palette($mat-deep-orange, 600);
+$theme: mat-dark-theme($primary, $accent, $warn);
+@include angular-material-theme($theme);
+
+
+
+.d-portrait-none{
+	@media  (orientation: portrait) {
+		display: none !important;
+	}
+}
+
+.d-portrait-block{
+	@media  (orientation: portrait) {
+		display: block !important;
+	}
+}
+
+.d-portrait-flex{
+	@media  (orientation: portrait) {
+		display: flex !important;
+	}
+}
+
+.d-landscape-none{
+	@media  (orientation: landscape) {
+		display: none !important;
+	}
+}
+
+.d-landscape-block{
+	@media  (orientation: landscape) {
+		display: block !important;
+	}
+}
+
+.d-landscape-flex{
+	@media  (orientation: landscape) {
+		display: flex !important;
+	}
+}

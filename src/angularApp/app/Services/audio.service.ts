@@ -9,15 +9,14 @@ declare const Worker : any;
 @Injectable({
 	providedIn: 'root'
 })
-export class AudioService {
+export class AudioService { 
 
-	private _Worker;
-	private _useWorker : boolean = false;
-	private _audioChunks = [];
 	canRecordAudio : boolean = false;
 	allowedToRecord : boolean = false;
 	isRecording : boolean = false;
-	private _Recorder;
+	private _AudioWorker;
+	private _useWorker : boolean = false;
+	private _audioChunks = [];
 	private _Stream;
 	private _Context;
 	private _sampleRate : number;
@@ -57,20 +56,20 @@ export class AudioService {
 		this.canRecordAudio = true;
 	}
 	
-	private _postOutput(data){
+	private _postAudioOutput(data){
 		this._Observers.forEach( obs =>{ obs.next(data); obs.complete(); } );
 		this._Observers = [];
 	}
 	
-	private _onWorkerMessage(e){
+	private _onAudioWorkerMessage(e){
 		switch(e.data.intent){
 			case "compiled":
-				this._postOutput(e.data.payload);
+				this._postAudioOutput(e.data.payload);
 				break;
 		}
 	}
 	
-	private _onError(e){
+	private _onAudioError(e){
 		console.log(e);
 		this._Observers.forEach( obs =>{ obs.error(e); } );
 		this._Observers = [];
@@ -82,7 +81,7 @@ export class AudioService {
 			for(let i = 0; i < this._numChannels; i++)
 				buffers.push(e.inputBuffer.getChannelData(i));
 			
-			this._Worker.postMessage({intent: "onaudioprocess", payload: buffers});
+			this._AudioWorker.postMessage({intent: "onaudioprocess", payload: buffers});
 		}else{
 			for(let i = 0; i < this._numChannels; i++)
 				this._buffers[i].push(...e.inputBuffer.getChannelData(i));
@@ -90,15 +89,15 @@ export class AudioService {
 		}
 	}
 	
-	private _spawnWorker(){		
-		this._Worker = new Worker("/audioRecorder/dist/audioRecorder.js");
-		this._Worker.onerror = this._onError.bind(this);
-		this._Worker.onmessage = this._onWorkerMessage.bind(this);
+	private _spawnAudioWorker(){		
+		this._AudioWorker = new Worker("/audioRecorder/dist/audioRecorder.js");
+		this._AudioWorker.onerror = this._onAudioError.bind(this);
+		this._AudioWorker.onmessage = this._onAudioWorkerMessage.bind(this);
 	}
 	
-	private _startRecording(stream) : void{
+	private _startAudioRecording(stream) : void{
 		if(this._useWorker)
-			this._spawnWorker();
+			this._spawnAudioWorker();
 		
 		this._Stream = stream;
 		this._Context = new AudioContext();
@@ -106,7 +105,7 @@ export class AudioService {
 		this._sampleRate = this._Context.sampleRate;
 		
 		if(this._useWorker){
-			this._Worker.postMessage({intent: "config", payload: {
+			this._AudioWorker.postMessage({intent: "config", payload: {
 				sampleRate : this._Context.sampleRate,
 				numChannels: this._numChannels
 			}});
@@ -177,31 +176,31 @@ export class AudioService {
 		return new Blob(blocks, {type: 'audio/mpeg'});
 	}
 
-	stopRecording() : void {
+	stopAudioRecording() : void {
 		this._Context.close();
 		this._Source.disconnect();
 		this._Node.disconnect();
 		this._Stream.getTracks().forEach(track => track.stop());
 		if(this._useWorker){
-			this._Worker.postMessage({intent: "stopStream"});	
+			this._AudioWorker.postMessage({intent: "stopStream"});	
 		}else{
-			this._postOutput(this._makeMP3());
+			this._postAudioOutput(this._makeMP3());
 			this._recLength = 0;
 			this._buffers = [];
 		}
 	}
 	
-	startRecording$() : Observable<any> {
+	startAudioRecording$() : Observable<any> {
 		if(this.isRecording) return this.audioOutput$;
 		
 		navigator.mediaDevices.getUserMedia({ audio: true })
 		.then(stream => {
 			this.allowedToRecord = true;
-			this._startRecording(stream);
+			this._startAudioRecording(stream);
 		})
 		.catch( e => {
 			this.allowedToRecord = false;
-			this._onError(e);
+			this._onAudioError(e);
 		});
 		return this.audioOutput$;
 	}

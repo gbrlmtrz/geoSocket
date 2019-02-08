@@ -1,0 +1,40 @@
+<div class="outerContainer" [id]="'mes_'+Message.id">
+	<span class="pic" *ngIf="!Message.byMe"
+		[class.shown]="Message.firstOf"
+		[style.background-color]="'#'+Message.sender.color">
+		<img alt="avatar" [src]="'/assets/avatars/'+Message.sender.picture+'.svg'" />
+	</span>
+	<span class="tail otherTail" *ngIf="!Message.byMe" [class.shown]="Message.firstOf"></span>
+	<div class="container" matRipple (press)="reply()" [class.byMe]="Message.byMe" [class.firstOf]="Message.firstOf">
+		<quote *ngIf="Message.quote != null" [message]="Message.quote"></quote>
+		<div class="user" [style.color]="'#'+Message.sender.color">
+			{{Message.byMe ? Lang.lang.Message.me : Message.sender.name}}
+			<mat-icon class="reply" role="button" (click)="reply()">
+				reply
+			</mat-icon>
+		</div>
+		<div class="audio" *ngIf="Message.media">
+			<audio #audio [src]="Message.media" ></audio>
+			<button mat-icon-button (click)="audio.paused ? audio.play() : audio.pause()" [style.color]="'#'+Message.sender.color">
+				<mat-icon *ngIf="audio.paused">play_circle_outline</mat-icon>
+				<mat-icon *ngIf="!audio.paused">pause_circle_outline</mat-icon>
+			</button>
+			<span>{{Lang.lang.Message.voiceNote}}</span>
+		</div>
+		<div class="message">
+			{{Message.message}}
+		</div>
+		<div class="date">
+			{{Message.date | date : 'h:mm a'}}
+			<mat-icon *ngIf="Message.byMe">
+				{{Message.recieved ? 'check' : 'access_time'}}
+			</mat-icon>
+		</div>
+	</div>
+	<span class="tail meTail" *ngIf="Message.byMe" [class.shown]="Message.firstOf"></span>
+	<span class="pic" *ngIf="Message.byMe" 
+		[class.shown]="Message.firstOf"
+		[style.background-color]="'#'+Message.sender.color">
+		<img alt="avatar" [src]="'/assets/avatars/'+Message.sender.picture+'.svg'" />
+	</span>
+</div>

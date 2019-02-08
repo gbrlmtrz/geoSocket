@@ -1,0 +1,190 @@
+.mContainer {
+	display: flex;
+	flex-direction: column;
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	right: 0;
+}
+
+.isPortrait mat-sidenav{
+	margin-top: 56px;
+}
+
+@keyframes nudge {
+	from {
+		background-position: 5px 0;
+	}
+	to {
+		background-position: -5px 0;
+	}
+}
+
+.sidenavContainer{
+	background-image: url("/assets/bg.png");
+	background-position: 0px 0px;
+}
+
+.sidenavContainer.nudge{
+	animation: nudge .1s linear infinite;
+}
+
+.isPortrait .mToolbar {
+	position: fixed;
+	z-index: 2;
+}
+
+h1.title {
+	margin-left: 8px;
+}
+
+.sidenavContainer {
+	flex: 1;
+}
+
+/*.isPortrait .sidenavContainer {
+	flex: 1 0 auto;
+}*/
+
+.mToolbarIcon {
+	padding: 0 14px;
+}
+
+.mToolbarSpacer {
+	flex: 1 1 auto;
+}
+
+#chat{
+	display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: column;
+    flex-direction: column;
+}
+
+#chat > *{
+	transition: all ease-in-out .3s;
+}
+
+#history{
+	flex: 1 1 0;
+	display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: column-reverse;
+    flex-direction: column-reverse;
+	padding: 0 9% 1% 9%;
+    overflow-y: auto;
+}
+
+.isPortrait #history{
+	margin-top: 56px;
+}
+
+
+#keyboard{
+	display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: row;
+    flex-direction: row;
+	min-height: 62px;
+    align-items: flex-end;
+	margin: 0 5px 5px 5px;
+}
+
+#keyboard > button{
+	margin-left: 5px;
+}
+
+audio{
+	width: 0px;
+	height: 0px;
+	visibility: hidden;
+}
+
+#visualKeyboard{
+	display: flex;
+    flex: 1 1 0;
+	flex-direction: column;
+	background-color: #212121;
+	border-radius: 30px;
+}
+
+#quote{
+	display: flex;
+	max-height: 90px;
+	margin: 0 5px 5px 5px;
+	height: auto;
+    align-items: center;
+	padding-top: 4px;
+	transition: height ease-in-out .5s;
+}
+
+#quote quote{
+	flex: 1 1 0;
+}
+
+#quote > button{
+	color: #757575;
+}
+
+.quoteSpacer{
+	height: 1px;
+	width: 40px;
+	display: block;
+}
+
+.isPortrait #quoteSpacer{
+	display: none;
+}
+
+#text{
+	flex: 1 1 0;
+	display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: row;
+    flex-direction: row;
+	min-height: 62px;
+	padding: 0 10px;
+    align-items: center;
+}
+
+#text > button{
+	color: #757575;
+}
+
+#inputarea{
+	flex: 1 1 0;
+    padding: 9px 12px 11px 12px;
+    margin: 5px 10px;
+	display: flex;
+}
+
+#inputPlaceholder{
+	position: absolute;
+	color: #757575;
+}
+
+#input{
+	line-height: 20px;
+    min-height: 20px;
+    width: 100%;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+    font-size: 15px;
+    font-weight: normal;
+    max-height: 100px;
+    min-height: 20px;
+    outline: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    word-break: break-word;
+	z-index: 2;
+}
+
+.rec{
+	color: #d50000;
+}

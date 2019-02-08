@@ -1,0 +1,10 @@
+<div class="container" role="button" [style.border-color]="'#'+Message.sender.color">
+	<div class="user" [style.color]="'#'+Message.sender.color">
+		{{Message.byMe ? Lang.lang.Message.me : Message.sender.name}}
+	</div>
+	<div class="messageContainer">
+		<div class="message">
+			{{Message.message}}
+		</div>
+	</div>
+</div>

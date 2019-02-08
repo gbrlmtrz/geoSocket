@@ -113,4 +113,10 @@ export class GeoLocationService {
 	constructor(private _Visibility : VisibilityService) { 
 	}
 	
+	close(){
+		this._stopWatch();
+		this._positionObservers.forEach( obs => obs.complete() );
+		this._positionObservers = [];
+	}
+	
 }

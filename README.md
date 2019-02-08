@@ -31,6 +31,10 @@
 	- [x] Get browser fingerprint
 - High
 	- [ ] Mobile Friendly
+	- [X] Binary compression
+	- [X] Voice notes
+	- [X] Photos
+		- [ ] GIF
 	- [ ] Emoji keyboard support
 - Medium
 	- [X] Socket connection in the WebWorker

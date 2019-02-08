@@ -4,14 +4,24 @@ const { inflate, deflate } = require('pako');
 //const ports = new Map();
 
 //console.log(this);
-let Socket;
 const that = self;
+let Socket;
+let tryReconnect = true;
+let reconnectTimeout;
+let URL;
+let times = 0;
+let channel;
 
-//ToDo reconnect
 const deflateData = function(arrayBufer){
 	const uint8array = new Uint8Array(arrayBufer);
 	const deflated = inflate(uint8array);
-	postMessage({intent: "message", payload: deserialize(deflated)});
+	const payload = deserialize(deflated);
+	tryReconnect = payload.event != "terminated";
+	if(payload.event == "channel"){
+		channel = payload.payload.channel.id;
+	}
+	
+	postMessage({intent: "message", payload: payload});
 };
 
 const onSMessage = function(d){
@@ -30,20 +40,39 @@ const onError = function(){
 	postMessage({intent : "error"});
 };
 
+const reconnectTimeoutFN = function(){
+	createSocket(URL);
+	reconnectTimeout = setTimeout(reconnectTimeoutFN, times * 5000);
+};
+
 const onClose = function(){
 	postMessage({intent : "close" });
+	if(tryReconnect){
+		reconnectTimeout = setTimeout(reconnectTimeoutFN, times * 5000);
+	}
 };
 
 const onOpen = function(){
 	postMessage({intent : "open" });
-};
-
-const createSocket = function(url){
-	Socket = new WebSocket(url);
-	Socket.addEventListener("open", onOpen);
+	if(reconnectTimeout != null){
+		clearTimeout(reconnectTimeout);
+		times = 0;
+	}
 	Socket.addEventListener("close", onClose);
 	Socket.addEventListener("error", onError);
 	Socket.addEventListener("message", onSMessage);
+};
+
+const createSocket = function(url){
+	URL = url;
+	let conUrl = url;
+	if(channel)
+		conUrl = `${url}&channel=${channel}`;
+	if(Socket)
+		Socket.close();
+	Socket = new WebSocket(conUrl);
+	Socket.addEventListener("open", onOpen);
+	times++;
 };
 
 const onMessage = function(e){
@@ -52,11 +81,13 @@ const onMessage = function(e){
 			createSocket(e.data.url);
 			break;
 		case "send":
-			const d = deflate(serialize(e.data.payload), {level: 9});
+			const serialized = serialize(e.data.payload);
+			const d = deflate(serialized, {level: 9});
 			Socket.send(d);
 			break;
 		case "close":
 			Socket.close();
+			close();
 			break;
 	}
 };

@@ -1,0 +1,9 @@
+.avatar{
+	height: 2em;
+}
+
+.selectedAvatar{
+	background-position: center;
+	background-size: contain;
+	background-repeat: no-repeat;	
+}

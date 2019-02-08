@@ -15,7 +15,7 @@ const ChannelsEntity = require("../Entities").Channels.instance;
 const {getChannelKey, getRedis} = require("../../redis");
 const {findChannelByDistance, findChannelByIP, findPlaceNearby} = require("../channelFinder");
 const URLParser = require("url").parse;
-const uuid = require("uuid/v4");
+const nanoid = require('nanoid');
 const update = require("./immutability-helper")
 const Ajv = require("ajv");
 const ajv = new Ajv({
@@ -53,7 +53,7 @@ const eventSchemaValidator = ajv.compile({
 
 const noop = function(){};
 
-const eventNooper = function(socketState, channelState, event, cb){ cb(true, socketState, channelState, event); };
+const eventNooper = function(socketState, channelState, event, cb){ cb(true, null, null, event); };
 
 const serializeAndCompress = function(obj){
 	let arrBuff = BSON.serialize(obj);
@@ -83,8 +83,8 @@ const addEvent = function(eventName, event){
 	/*if(!eventSchemaValidator(event.schema))
 		throw new Error("Event's schema doesn't match the required schema");*/
 	
-	if(event.hasOwnProperty("eventHandler") && typeof(event.eventHandler) != "function")
-		throw new Error(`Event's eventHandler must be a function ${typeof(event.eventHandler)} given`);
+	if(event.hasOwnProperty("onEvent") && typeof(event.onEvent) != "function")
+		throw new Error(`Event's onEvent must be a function ${typeof(event.onEvent)} given`);
 	
 	const newEvent = {
 		validator: ajv.compile(event.schema),
@@ -92,8 +92,14 @@ const addEvent = function(eventName, event){
 		publish: event.publish || false,
 		toOne: event.toOne || false,
 		persists: event.persists || false,
-		eventHandler: event.eventHandler || eventNooper
+		onEvent: event.onEvent || eventNooper
 	};
+	
+	if(event.hasOwnProperty("onCreate"))
+		newEvent.onCreate = event.onCreate;
+	
+	if(event.hasOwnProperty("onClose"))
+		newEvent.onClose = event.onClose;
 	
 	Events.set(eventName, newEvent);
 };
@@ -215,7 +221,7 @@ const onPMessage = function(chnl, message){
 					const it = wss.clients.values();
 					let found = false;
 					let wsclients = it.next();
-					while(!found || !wsclients.done){
+					while(!found && !wsclients.done){
 						const ws = wsclients.value;
 						if(ws.state.pcid == client){
 							found = true;
@@ -332,13 +338,13 @@ const publish = function(channel, payload){
 	pub.publish(`event_${channel}`, ObjectToBinString(payload));
 };
 
-const findAndSend = function(toClient, payload){	
+const findAndSend = function(toClient, payload){
 	const it = wss.clients.values();
 	let found = false;
 	let wsclients = it.next();
-	while(!found || !wsclients.done){
+	while(!found && !wsclients.done){
 		const ws = wsclients.value;
-		if(ws.state.pcid == toClient){
+		if(ws.state.id == toClient){
 			found = true;
 			ws.send(serializeAndCompress(payload), err => {if(err) console.error(err)});
 		}
@@ -350,7 +356,7 @@ const publishToOne = function(toClient, payload){
 	if(config.get("devMode"))
 		payload.emiter = ServerName;
 	
-	pub.get(`client_${toClient}`, (err, client) => {
+	pub.get(`clientid_${toClient}`, (err, client) => {
 		if(err){
 			console.error(err);
 			return;
@@ -429,7 +435,7 @@ const onClose = function(foo, bar, toChannel){
 		Channels.get(this.state.channel).delete(this.state.id);
 	}
 	
-	if(Channels.get(this.state.channel).size == 0){
+	if(!Channels.has(this.state.channel) || Channels.get(this.state.channel).size == 0){
 		Channels.delete(this.state.channel);
 		sub.unsubscribe(`event_${this.state.channel}`, (err) => { if(err) console.error(err); });
 	}
@@ -447,8 +453,10 @@ const onClose = function(foo, bar, toChannel){
 			
 			if(client != null){
 				const pieces = client.split("<|>");
-				if(pieces[1] == socketState.id)
+				if(pieces[1] == socketState.id){
+					pub.del(`clientid_${socketState.id}`);
 					pub.del(`client_${socketState.pcid}`);
+				}
 			}
 		});
 	}
@@ -475,6 +483,11 @@ const onClose = function(foo, bar, toChannel){
 			ips: { $pull : socketState.ip },
 			geometry : { coordinates : {$pull: [socketState.lon, socketState.lat] } }
 		};
+		
+		for(const event of Events.values())
+			if(event.hasOwnProperty("onClose") && event.onClose != undefined)
+				event.onClose(socketState, newState);
+		
 		pub.publish(`updates_${socketState.channel}`, JSON.stringify(newState));
 	});
 	
@@ -487,7 +500,6 @@ const onClose = function(foo, bar, toChannel){
 		onConnection(this);
 	}
 };
-
 
 const simplify = function(object){
 	return [object.event, object.payload, object.sender];
@@ -511,11 +523,15 @@ const onMessage = function(message){
 	try{
 		message = decompressIncoming(message);
 	}catch(e){
-		console.log(e);
+		console.error(e);
 		return;
 	}
 	
 	message.sender = this.state.id;
+	
+	//for(let key in message.payload){
+	//	console.log("key", key);
+	//}
 	
 	if(eventSchemaValidator(message) && Events.has(message.event)){
 		const event = Events.get(message.event);
@@ -528,18 +544,18 @@ const onMessage = function(message){
 				}
 				channel = JSON.parse(channel);
 				
-				const eventHandlerCB = (success, thisState, channelState, payload) => {
+				const onEventCB = (success, newSocketState, newChannelState, payload) => {
 					if(!success) return;
 					
-					if(JSON.stringify(this.state) !== JSON.stringify(thisState))
-						this.state = thisState;
+					if(newSocketState != null)
+						this.state = update(this.state, newSocketState);
 					
-					if(JSON.stringify(channelState.state) !== JSON.stringify(channelState))
-						channel.state = channelState;
+					if(newChannelState != null)
+						pub.publish(`updates_${this.state.channel}`, JSON.stringify(newChannelState));
 					
-					if(event.toOne && payload.to)
-						publishToOne(payload.to, payload);
-					
+					if(event.toOne && payload.payload.to){
+						publishToOne(payload.payload.to, payload);
+					}
 					if(event.publish)
 						publish(this.state.channel, payload);
 					
@@ -547,7 +563,7 @@ const onMessage = function(message){
 						this.send(serializeAndCompress(payload));
 				};
 				
-				event.eventHandler(objectCopy(this.state), objectCopy(channel.state), message, eventHandlerCB);
+				event.onEvent(objectCopy(this.state), objectCopy(channel.state), message, onEventCB);
 			});
 		}
 	}
@@ -559,7 +575,7 @@ const onConnection = function(socket, request){
 	if(!socket.hasOwnProperty("state")){
 		const query = request.socketQuery;
 		socket.state = {
-			id: uuid(),
+			id: nanoid(),
 			pcid: query.pcid,
 			lat: query.lat,
 			lon: query.lon,
@@ -575,13 +591,14 @@ const onConnection = function(socket, request){
 				return;
 			}
 			
+			pub.set(`client_${socket.state.pcid}`, `${ServerName}<|>${socket.state.id}`);
+			pub.set(`clientid_${socket.state.id}`, `${ServerName}<|>${socket.state.id}`);
+			
 			if(client != null){
 				const pieces = client.split("<|>");
 				if(pieces[0] != ServerName)
 					pub.publish(`server_${pieces[0]}`, JSON.stringify({command: "terminate", client: socket.state.pcid, reason: "byOtherCon"}));
 			}
-			
-			pub.set(`client_${socket.state.pcid}`, `${ServerName}<|>${socket.state.id}`);
 		});
 	}
 	
@@ -632,6 +649,8 @@ const onConnection = function(socket, request){
 	});
 	
 	socket.onClose = onClose;
+	socket.send(serializeAndCompress({event: "yourID", sender: ServerName, payload: {id: socket.state.id}}));
+	
 	socket.on('pong', onPong);
 	socket.on("message", onMessage);
 	socket.on("close", socket.onClose);
@@ -649,13 +668,14 @@ const createChannel = function(query, filledChannels, cb){
 			if(placesNearby[0].distance < config.get("channelSettings.radius"))
 				goodPlace = placesNearby[0];
 		}
-		
+		const cid = query.channel || nanoid();
 		const Channel = {
-			_id: query.channel || uuid(),
+			_id: cid,
 			type: "Feature",
 			collection: "channels",
 			created: Date.now(),
 			state: {
+				id : cid,
 				connectedClients: 0,
 				ips: [],
 				clients: [],
@@ -665,6 +685,10 @@ const createChannel = function(query, filledChannels, cb){
 				}
 			}
 		};
+		
+		for(const event of Events.values())
+			if(event.hasOwnProperty("onCreate") && event.onCreate != undefined)
+				event.onCreate(Channel);
 		
 		if(goodPlace){
 			Channel.state.channelName = goodPlace.name;
@@ -679,7 +703,7 @@ const createChannel = function(query, filledChannels, cb){
 			
 			pub.set(`channel_${Channel._id}`, JSON.stringify(Channel), (err) => {
 				if(err){
-					console.error(err);
+					console.error("insert err", err);
 					cb(false);
 					return;
 				}
@@ -703,7 +727,7 @@ const createChannel = function(query, filledChannels, cb){
 						const it = filledChannels.values();
 						let chn = it.next();
 						let needed = config.get("channelSettings.wantedClients")-1
-						while(!chn.done || needed > 0){
+						while(!chn.done && needed > 0){
 							const {_id, state} = chn.value;
 							const available = Math.abs(state.connectedClients - needed);
 							const clientsToSwitch = [];

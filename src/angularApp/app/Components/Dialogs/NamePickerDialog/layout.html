@@ -1,0 +1,36 @@
+<form #f="ngForm" (ngSubmit)="onSubmit(f)">
+	<h1 mat-dialog-title>{{Lang.lang.NamePickerDialog.title}}</h1>
+	<div mat-dialog-content>
+		<mat-form-field class="col-12">
+			<input matInput [placeholder]="Lang.lang.NamePickerDialog.name" required name="name" [(ngModel)]="User.name">
+		</mat-form-field>
+		<mat-form-field class="col-12">
+			<mat-select [placeholder]="Lang.lang.NamePickerDialog.picture" required name="picture" [(ngModel)]="User.picture" class="selectedAvatar">
+				<mat-select-trigger>
+					<img class="avatar" [src]="'/assets/avatars/'+User.picture+'.svg'" alt="avatar" />
+				</mat-select-trigger>
+				<mat-option *ngFor="let picture of pictures" [value]="picture">
+					<img class="avatar" [src]="'/assets/avatars/'+picture+'.svg'" alt="avatar" />
+				</mat-option>
+			</mat-select>
+		</mat-form-field>
+		<mat-form-field class="col-12">
+			<mat-select [placeholder]="Lang.lang.NamePickerDialog.color" required name="color" [(ngModel)]="User.color">
+				<mat-select-trigger [style.background-color]="'#'+User.color">
+					<span [style.color]="'#'+User.color">
+						#{{User.color}}
+					</span>
+				</mat-select-trigger>
+				<mat-option *ngFor="let color of colors" [value]="color" [style.background-color]="'#'+color">
+					<span [style.color]="'#'+color">
+						#{{color}}
+					</span>
+				</mat-option>
+			</mat-select>
+		</mat-form-field>
+	</div>
+	<div mat-dialog-actions>
+		<button type="button" mat-button (click)="onNoClick()" *ngIf="showCancel">{{Lang.lang.NamePickerDialog.cancel}}</button>
+		<button type="submit" mat-button cdkFocusInitial>{{Lang.lang.NamePickerDialog.enter}}</button>
+	</div>
+</form>

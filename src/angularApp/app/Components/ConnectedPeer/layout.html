@@ -1,0 +1,16 @@
+<div class="mContainer" matRipple>
+	<div class="imgContainer">
+		<div class="imgBackground" [style.background-color]="'#'+User.color"></div>
+		<img class="img" matRipple [src]="'/assets/avatars/'+User.picture+'.svg'" alt="avatar"/>
+	</div>
+	<div class="actionContainer"> 
+		<span [title]="User.name">{{User.name}}</span>
+		<span class="mSpacer"></span>
+		<button mat-icon-button (click)="call()">
+			<mat-icon>call</mat-icon>
+		</button>
+		<button mat-icon-button (click)="nudge()" [disabled]="disableNudge">
+			<mat-icon>vibration</mat-icon>
+		</button>
+	</div>
+</div>

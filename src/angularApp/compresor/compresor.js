@@ -1,7 +1,7 @@
-const {Lzp3} = require('@faithlife/compressjs');
+require('fast-text-encoding');
 const {inflate, deflate} = require('pako');
-const str2ab = require('string-to-arraybuffer');
-const ab2str = require('arraybuffer-to-string');
+//const str2ab = require('string-to-arraybuffer');
+//const ab2str = require('arraybuffer-to-string');
 const {arrayBufferToBlob} = require('blob-util');
 
 const that = self;
@@ -14,16 +14,22 @@ const compress = function(blob){
 			const uint8Array  = new Uint8Array(arrayBuffer);
 			//const compressed = Lzp3.compressFile(uint8Array, null, 9);
 			const compressed = deflate(uint8Array, {level : 9});
-			const com = ab2str(compressed, 'binary');
-			resolve(com);
+			//const com = ab2str(compressed, 'binary');
+			//console.log("compressed length", compressed.length);
+			//const str = new TextDecoder().decode(compressed);
+			//console.log("text length", compressed.length);
+			resolve(Array.from(compressed));
+			//resolve(str);
 		};
 		fileReader.readAsArrayBuffer(blob);
 	});
 };
 
 const decompress = function(base64string){
-	const rebuff = str2ab(base64string);
-	const uint = new Uint8Array(rebuff);
+	//console.log("in txt length", base64string.length);
+	//const rebuff = new TextEncoder().encode(base64string);
+	//console.log("rebuff length", rebuff.length);
+	const uint = new Uint8Array(base64string);
 	//const decompressed = Lzp3.decompressFile(uint);
 	const decompressed = inflate(uint);
 	return arrayBufferToBlob(decompressed);

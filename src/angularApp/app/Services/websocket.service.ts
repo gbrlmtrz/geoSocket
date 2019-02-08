@@ -22,9 +22,12 @@ export class WebsocketService {
 	private _withWebSocket : boolean = false;
 	private _connectionData : ConnectionPayload;
 	private _wsURL : string;
-	private _connected : boolean = false;
+	private _online : boolean = false;
+	private _tryReconnect : boolean = true;
+	private _reconnectTimeout;
+	private _times : number = 0;
 	
-	private _connectedObservers : Observer<any>[] = [];
+	private _onlineObservers : Observer<any>[] = [];
 	private _messagesObservers : Observer<any>[] = [];
 	
 	messages$ : Observable<Event> = new Observable<Event>( (observer : Observer<any>) => {
@@ -36,12 +39,12 @@ export class WebsocketService {
 		};
 	});
 	
-	connected$ : Observable<boolean> = new Observable<boolean>( (observer : Observer<any>) => {
-		this._connectedObservers.push(observer);
-		observer.next(this._connected);
+	online$ : Observable<boolean> = new Observable<boolean>( (observer : Observer<any>) => {
+		this._onlineObservers.push(observer);
+		observer.next(this._online);
 		return {
 			unsubscribe: () => {
-				this._connectedObservers.splice(this._connectedObservers.indexOf(observer), 1);
+				this._onlineObservers.splice(this._onlineObservers.indexOf(observer), 1);
 			}
 		};
 	});
@@ -56,26 +59,26 @@ export class WebsocketService {
 		}
 	}
 	
-	get connected() : boolean{
-		return this._connected;
+	get online() : boolean{
+		return this._online;
 	}
 	
-	set connected(val : boolean){
-		this._connected = val;
-		this._connectedObservers.forEach( obs => obs.next(val) );
+	set online(val : boolean){
+		this._online = val;
+		this._onlineObservers.forEach( obs => obs.next(val) );
 	}
 	
 	private _onWorkerMessage(e){
 		switch(e.data.intent){
 			case "close":
-				this.connected = false;
+				this.online = false;
 				break;
 			case "error":
-				this.connected = false;
+				this.online = false;
 				this._onError(e.data.payload);
 				break;
 			case "open":
-				this.connected = true;
+				this.online = true;
 				break;
 			case "message":
 				this._onMessage(e.data.payload);
@@ -98,25 +101,51 @@ export class WebsocketService {
 	private _deflateData(arrayBuffer){
 		const uint8array = new Uint8Array(arrayBuffer);
 		const deflated = inflate(uint8array);
-		this._onMessage(deserialize(deflated));
+		const payload = deserialize(deflated);
+		this._tryReconnect = payload.event != "terminated";
+		if(payload.event == "channel"){
+			this._connectionData.channel = payload.payload.channel.id;
+		}
+		this._onMessage(payload);
+	}
+	
+	private _reconnectTimeoutFN(){
+		this.connect$(this._connectionData);
+		this._reconnectTimeout = setTimeout(this._reconnectTimeoutFN, this._times * 5000);
 	}
 	
 	private _connectWithWS(){
+		if(this._Socket != null) this._Socket.close();
 		this._Socket = new WebSocket(this._wsURL);
-		this._Socket.addEventListener("open", () => this.connected = true );
-		this._Socket.addEventListener("close", () => this.connected = false );
-		this._Socket.addEventListener("error", () => this.connected = false );
-		this._Socket.addEventListener("message", d => {
-			if(d.data instanceof Blob){
-				const reader = new FileReader();
-				reader.addEventListener('loadend', (e) => {
-					this._deflateData(reader.result);
-				}, false)
-				reader.readAsArrayBuffer(d.data)
-			}else if(d.data instanceof ArrayBuffer){
-				this._deflateData(d.data);
+		this._Socket.addEventListener("open", () => {
+			this.online = true;			
+			if(this._reconnectTimeout != null){
+				clearTimeout(this._reconnectTimeout);
+				this._times = 0;
 			}
+			
+			this._Socket.addEventListener("close", () => {
+				this.online = false;
+				if(this._tryReconnect){
+					this._reconnectTimeout = setTimeout(this._reconnectTimeoutFN, this._times * 5000);
+				}
+			});
+			
+			this._Socket.addEventListener("error", () => this.online = false );
+			
+			this._Socket.addEventListener("message", d => {
+				if(d.data instanceof Blob){
+					const reader = new FileReader();
+					reader.addEventListener('loadend', (e) => {
+						this._deflateData(reader.result);
+					}, false)
+					reader.readAsArrayBuffer(d.data)
+				}else if(d.data instanceof ArrayBuffer){
+					this._deflateData(d.data);
+				}
+			});
 		});
+		this._times++;
 	}
 	
 	private _connect() : void{
@@ -124,10 +153,26 @@ export class WebsocketService {
 		else this._connectWithWorker();
 	}
 	
+	disconnect() : void {
+		if(!this._online) return;
+		if(this._withWebSocket){
+			this._Socket.close();
+		}else{
+			this._Worker.postMessage({intent: "close"});
+			this._Worker = null;
+		}
+		//this._onlineObservers.forEach( obs => obs.complete() );
+		//this._messagesObservers.forEach( obs => obs.complete() );
+		//this._onlineObservers = [];
+		//this._messagesObservers = [];
+	}
+	
 	sendMessage(event : Event) : void{
-		if(!this._connected) return;
-		if(this._withWebSocket) this._Socket.send(deflate(serialize(event), {level: 9}));
-		else this._Worker.postMessage({intent: "send", payload: event});	
+		if(!this._online) return;
+		if(this._withWebSocket) 
+			this._Socket.send(deflate(serialize(event), {level: 9}));
+		else 
+			this._Worker.postMessage({intent: "send", payload: event});	
 	}
 	
 	connect$(connectionPayload : ConnectionPayload) : Observable<boolean>{
@@ -139,7 +184,7 @@ export class WebsocketService {
 		const params : string = pieces.join("&");
 		this._wsURL = `${this._Config.WS}${params}`;
 		this._connect();
-		return this.connected$;
+		return this.online$;
 	}
 	
 	

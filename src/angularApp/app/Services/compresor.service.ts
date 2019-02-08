@@ -78,7 +78,7 @@ export class CompresorService {
 		});
 	}
 	
-	private _decompress(base64string : string) : Blob {
+	private _decompress(base64string) : Blob {
 		const rebuff = str2ab(base64string);
 		const uint = new Uint8Array(rebuff);
 		const decompressed = inflate(uint);
@@ -100,7 +100,7 @@ export class CompresorService {
 		});
 	}
 	
-	decompress(data : string) : Promise<Blob>{
+	decompress(data) : Promise<Blob>{
 		return new Promise((resolve) => {
 			if(this._inMainThread) return this._decompress(data);
 			const _uuid = uuid();

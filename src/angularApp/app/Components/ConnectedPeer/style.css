@@ -1,0 +1,56 @@
+.mContainer{
+	display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: row;
+    flex-direction: row;
+    height: 72px;
+}
+
+.imgContainer{
+    -webkit-flex: none;
+    flex: none;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+	padding: 0 15px 0 13px;
+}
+
+.imgBackground{
+	height: 49px;
+	width: 49px;
+	border-radius: 50%;
+    position: absolute;
+    z-index: -1;
+}
+
+.img{
+	object-fit: cover;
+	height: 49px;
+	width: 49px;
+}
+
+.actionContainer{
+    align-items: center;
+    -webkit-flex-grow: 1;
+    flex-grow: 1;
+    min-width: 0;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: row;
+    flex-direction: row;
+    -webkit-justify-content: center;
+    justify-content: center;
+}
+
+.nameContainer span{
+    overflow: hidden;
+    position: relative;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+	font-weight: bold;
+}
+
+.mSpacer {
+	flex: 1 1 auto;
+}
