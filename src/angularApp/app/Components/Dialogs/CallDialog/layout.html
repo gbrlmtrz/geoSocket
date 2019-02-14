@@ -1,0 +1,29 @@
+<div class="callContainer">
+	<div class="presentation">
+		<div class="imgContainer">
+			<div class="imgBackground" [style.background-color]="'#'+User.color"></div>
+			<img class="img" matRipple [src]="'/assets/avatars/'+User.picture+'.svg'" alt="avatar"/>
+		</div>
+		<div class="actionContainer"> 
+			<span [title]="User.name">{{User.name}}</span>
+		</div>
+	</div>
+	<div class="theirFeed">
+		<video *ngIf="theirFeed != null" [class]="theirFilter" [srcObject]="theirFeed" autoplay="1"></video>
+	</div>
+	<div class="myFeed">
+		<video *ngIf="RTC.LocalStream != null" [class]="filter" [srcObject]="RTC.LocalStream" autoplay="1"></video>
+	</div>
+	<div class="controls">
+		<mat-form-field *ngIf="theirFeed != null">
+			<mat-select [placeholder]="Lang.lang.CallDialog.filter" name="filter" [(ngModel)]="filter">
+				<mat-option *ngFor="let filter of filters" [value]="filter.class">
+					{{filter.name}}
+				</mat-option>
+			</mat-select>
+		</mat-form-field>
+		<button mat-fab (click)="hangup()">
+			<mat-icon class="hangup" color="primary">call_end</mat-icon>
+		</button>
+	</div>
+</div>

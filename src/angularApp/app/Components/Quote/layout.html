@@ -3,6 +3,16 @@
 		{{Message.byMe ? Lang.lang.Message.me : Message.sender.name}}
 	</div>
 	<div class="messageContainer">
+		<div class="audio" *ngIf="Message.media">
+			<audio #audio [src]="Message.media" ></audio>
+			<button mat-icon-button (click)="audio.paused ? audio.play() : audio.pause()" [style.color]="'#'+Message.sender.color">
+				<mat-icon *ngIf="audio.paused">play_circle_outline</mat-icon>
+				<mat-icon *ngIf="!audio.paused">pause_circle_outline</mat-icon>
+			</button>
+		</div>
+		<div class="image" *ngIf="Message.photo && Message.photo.url">
+			<img alt="photo" [src]="Message.photo.url" [class]="Message.photo.filter"/>
+		</div>
 		<div class="message">
 			{{Message.message}}
 		</div>

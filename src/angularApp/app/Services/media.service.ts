@@ -120,14 +120,15 @@ export class MediaService {
 
 	private _stopCameraFeed(){
 		this.inUse = false;
-		this._CameraStream.getTracks().forEach(track => track.stop());
+		if(this._CameraStream)
+			this._CameraStream.getTracks().forEach(track => track.stop());
 		this.isCapturingImage = false;
 		this._ImageCapture = null;
 		this._CameraStream = null;
 	}
 	
 	setFilterClass(f : string){
-		this._ImageCapture.canvas2dContext.filter = f;
+		this._ImageCapture.setFilter(f);
 	}
 	
 	stopCameraFeed() : void {
@@ -155,7 +156,16 @@ export class MediaService {
 		(<any> navigator.mediaDevices).getUserMedia({
 			video: { 
 				facingMode : "user",
-				framerate : 15
+				aspectRatio: 1.77,
+				resizeMode : "crop-and-scale",
+				height: {
+					max : 480,
+					min : 270
+				},
+				width: {
+					max : 480,
+					min : 270
+				}
 			} 
 		})
 		.then(stream => {
@@ -203,9 +213,7 @@ export class MediaService {
 			video: { 
 				facingMode : "user",
 				aspectRatio: 1.77,
-				framerate : {
-					max : 24
-				},
+				resizeMode : "crop-and-scale",
 				height: {
 					max : 480,
 					min : 270
@@ -214,7 +222,9 @@ export class MediaService {
 					max : 480,
 					min : 270
 				},
-				resizeMode : "crop-and-scale"
+				framerate : {
+					max : 24
+				}
 			},
 			audio : {
 			  sampleSize: 8,
@@ -239,6 +249,7 @@ export class MediaService {
 	
 	private _postAudioOutput(data){
 		this._AudioObservers.forEach( obs =>{ obs.next(data); obs.complete(); } );
+		this.isProcesingAudio = false;
 		this._AudioObservers = [];
 	}
 	
@@ -359,12 +370,15 @@ export class MediaService {
 		return new Blob(blocks, {type: 'audio/mpeg'});
 	}
 
+	isProcesingAudio : boolean = false;
+	
 	stopAudioRecording() : void {
 		if(!this.isRecordingAudio) return;
 		this._Context.close();
 		this._Source.disconnect();
 		this._Node.disconnect();
 		this.isRecordingAudio = false;
+		this.isProcesingAudio = true;
 		this.inUse = false;
 		this._AudioStream.getTracks().forEach(track => track.stop());
 		if(this._useWorker){
@@ -377,7 +391,7 @@ export class MediaService {
 	}
 	
 	startAudioRecording$() : Observable<any> {
-		if(this.isRecordingAudio) return this.audioOutput$;
+		if(this.isRecordingAudio || this.isProcesingAudio) return this.audioOutput$;
 		
 		navigator.mediaDevices.getUserMedia({ audio: true })
 		.then(stream => {

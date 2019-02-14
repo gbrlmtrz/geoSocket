@@ -1,4 +1,4 @@
-require('fast-text-encoding');
+//require('fast-text-encoding');
 const {inflate, deflate} = require('pako');
 //const str2ab = require('string-to-arraybuffer');
 //const ab2str = require('arraybuffer-to-string');

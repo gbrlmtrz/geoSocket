@@ -3,6 +3,7 @@
 		"title" : "Six Degrees Near",
 		"changeName" : "Cambiar look",
 		"exit" : "Salir",
+		"showNotifications": "Ver notificaciones",
 		"typeYourMessage" : "Escribe tu mensaje..."
 	},
 	"NamePickerDialog" : {
@@ -16,8 +17,56 @@
 	"ConnectingDialog" : {
 		"title" : "Conectando"
 	},
+	"reconnectDialog" : {
+		"connectionLost" : "Has perdido tu conexión",
+		"reconnect" : "Volver a entrar"
+	},
 	"Message" : {
 		"me" : "Tu",
 		"voiceNote": "Nota de voz"
+	},
+	"DisconnectReasons" : {
+		"openedInAnotherTab" : "Has iniciado sesión en otra pestaña"
+	},
+	"NotificationTitles" : {
+		"nudge" : "Has recibido un zumbido",
+		"message" : "%s ha enviado un mensaje",
+		"voiceNote" : "%s ha enviado una nota de voz",
+		"nameChange" : "Un usuario ha cambiado de nombre",
+		"newUser" : "Un nuevo usuario se ha conectado",
+		"disconnected" : "Un usuario se ha desconectado",
+		"peerHasRejectedCallRequest" : "Video llamada cancelada",
+		"peerHasHungUp" : "Han colgado tu llamada",
+		"newCall" : "Tienes una llamada"
+	},
+	"NotificationBodies" : {
+		"copied" : "Enlace copiado en el portapapeles",
+		"nudge" : "%s te ha enviando un zumbido!",
+		"voiceNote" : "Click aqui para ver los nuevos mensajes",
+		"nameChange" : "%s ahora es %s",
+		"newUser" : "%s se ha conectado",
+		"disconnected" : "%s se ha desconectado",
+		"newCall" : "%s quiere hacer una videollamada!",
+		"peerHasRejectedCallRequest" : "%s no ha aceptado tu solicitud de video llamada"
+	},
+	"CallDialog" : {
+		"filter" : "Filtro",
+		"noFilter" : "Sin filtro"
+	},
+	"photoBoot" : {
+		"filter" : "Filtro",
+		"noFilter" : "Sin filtro"
+	},
+	"call" : {
+		"rejected" : "%s rechazo la llamada",
+		"disconnected" : "%s se ha desconectado",
+		"canceled": "%s ha cancelado la solicitud",
+		"hungup" : "%s ha colgado",
+		"technicalProblems" : "%s tiene problemas tecnicos"
+	},
+	"DialDialog" : {
+		"callerTitle" : "Marcando a",
+		"calleeTitle" : "LLamada de",
+		"cancel" : "Cancelar"
 	}
 }

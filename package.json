@@ -10,9 +10,9 @@
     "build:compresor": "webpack --config src/angularApp/compresor/webpack.config.js",
     "build:socketClient": "webpack --config src/angularApp/socketClient/webpack.config.js",
     "build:audioRecorder": "webpack --config src/angularApp/audioRecorder/webpack.config.js",
+    "build:app": "ng build --base-href https://sixdegreesnear.com/ --aot true --prod && node build/fix-sw --base-href https://sixdegreesnear.com/",
     "test": "ng test",
     "ng": "ng",
-    "build:app": "ng build --base-href https://localhost:8080/ --aot true --prod && node build/fix-sw --base-href https://localhost:8080/",
     "lint": "ng lint",
     "e2e": "ng e2e"
   },
@@ -113,6 +113,7 @@
     "ng-contenteditable": "^2.1.0",
     "protractor": "~5.4.0",
     "replace-in-file": "^3.4.3",
+    "sprintf-js": "^1.1.2",
     "string-to-arraybuffer": "^1.0.2",
     "terser-webpack-plugin": "^1.2.1",
     "to-array-buffer": "^3.2.0",

@@ -15,8 +15,19 @@ const payload = {
 		},
 		media: {
 			type: "array",
-			//properties: {},
-			//additionalProperties: true
+		},
+		photo: {
+			type: "object",
+			additionalProperties: false,
+			require: ["blob"],
+			properties: {
+				blob : {
+					type: "array"
+				},
+				filter : {
+					type: "string"
+				}
+			}
 		}
 	}
 };
@@ -30,13 +41,16 @@ module.exports = {
 	publish: true,
 	onEvent: function(socketState, channelState, event, cb){
 		event.payload.date = Date.now();
-		/*if(event.payload.media){
+		if(event.payload.media && !Array.isArray(event.payload.media)){
 			const media = [];
 			for(let key in event.payload.media){
 				media.push(event.payload.media[key]);
 			}
 			event.payload.media = media;
-		}*/
-		cb(true, null, null, event);
+		}
+		
+		const echo =   {...event};
+		echo.payload = { id : event.payload.id};
+		cb(true, null, null, event, echo);
 	}
 };

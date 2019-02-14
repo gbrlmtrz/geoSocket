@@ -6,12 +6,22 @@
 	border-radius: 7.5px;
 	background-color: rgba(255, 255, 255, .2);
 	padding: 8px;
-	max-height: 80px;
+	max-height: 120px;
     border-top: solid 1px;
     border-bottom: solid 1px;
     border-left: solid 4px;
     border-right: solid 4px;
 	cursor: pointer;
+}
+
+.audio, .image{
+	margin-right: 4px;
+}
+
+.image img{
+	height: 80px;
+	width: 80px;
+	object-fit: cover;
 }
 
 .user{
@@ -25,10 +35,13 @@
 	display: flex;
 	flex-direction: row;
 	flex-direction: row;
+    align-items: center;
 }
 
 .message{
     user-select: text;
     -webkit-white-space: pre-wrap;
     word-wrap: break-word;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }

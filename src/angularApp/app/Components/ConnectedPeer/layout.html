@@ -1,12 +1,17 @@
 <div class="mContainer" matRipple>
 	<div class="imgContainer">
-		<div class="imgBackground" [style.background-color]="'#'+User.color"></div>
-		<img class="img" matRipple [src]="'/assets/avatars/'+User.picture+'.svg'" alt="avatar"/>
+		<div class="imgBackground" [class.nudging]="User.nudging" [style.background-color]="'#'+User.color"></div>
+		<img class="img" matRipple [class.nudgingRev]="User.nudging" [src]="'/assets/avatars/'+User.picture+'.svg'" alt="avatar"/>
 	</div>
 	<div class="actionContainer"> 
 		<span [title]="User.name">{{User.name}}</span>
+		<div *ngIf="User.typing">
+			<span class="one">.</span>
+			<span class="two">.</span>
+			<span class="three">.</span>
+		</div>
 		<span class="mSpacer"></span>
-		<button mat-icon-button (click)="call()">
+		<button mat-icon-button (click)="call()" [disabled]="RTC.busy || User.onCall">
 			<mat-icon>call</mat-icon>
 		</button>
 		<button mat-icon-button (click)="nudge()" [disabled]="disableNudge">

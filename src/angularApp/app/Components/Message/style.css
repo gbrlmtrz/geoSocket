@@ -67,7 +67,7 @@ audio{
 	transition: all ease-in-out .2s;
     flex-grow: 1;
     text-align: end;
-	pointer: cursor;
+	cursor: pointer;
 }
 
 .container:hover .reply{
@@ -120,4 +120,31 @@ audio{
     width: 25px;
     object-fit: cover;
     border-radius: 50%;
+}
+
+.photo{
+	display: flex;
+    -webkit-flex-direction: row;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+.photo > img{
+	object-fit: cover;
+	max-height: 480px;
+	max-width: 480px;
+}
+
+
+@media screen and (max-width: 479px){
+	.photo > img{
+		max-width: 100%;
+	}
+}
+
+@media screen and (max-height: 479px){
+	.photo > img{
+		max-height: 100%;
+	}
 }

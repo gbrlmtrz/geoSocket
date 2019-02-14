@@ -1,0 +1,11 @@
+<h1 mat-dialog-title>
+	{{Lang.lang.reconnectDialog.connectionLost}}
+</h1>
+<div mat-dialog-content *ngIf="reason">
+	<span>{{reason}}</span>
+</div>
+<div mat-dialog-actions>
+	<button type="submit" mat-button cdkFocusInitial mat-dialog-close>
+		{{Lang.lang.reconnectDialog.reconnect}}
+	</button>
+</div>

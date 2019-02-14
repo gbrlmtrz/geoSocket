@@ -1,18 +1,18 @@
 .mContainer{
 	display: -webkit-flex;
-    display: flex;
-    -webkit-flex-direction: row;
-    flex-direction: row;
-    height: 72px;
+	display: flex;
+	-webkit-flex-direction: row;
+	flex-direction: row;
+	height: 72px;
 }
 
 .imgContainer{
-    -webkit-flex: none;
-    flex: none;
-    display: -webkit-flex;
-    display: flex;
-    -webkit-align-items: center;
-    align-items: center;
+	-webkit-flex: none;
+	flex: none;
+	display: -webkit-flex;
+	display: flex;
+	-webkit-align-items: center;
+	align-items: center;
 	padding: 0 15px 0 13px;
 }
 
@@ -20,8 +20,25 @@
 	height: 49px;
 	width: 49px;
 	border-radius: 50%;
-    position: absolute;
-    z-index: -1;
+	position: absolute;
+	z-index: -1;
+}
+
+@keyframes nudgePeer {
+	from {
+		margin-left: -5px;
+	}
+	to {
+		margin-left: 5px;
+	}
+}
+
+.nudging{
+	animation: nudgePeer .1s linear alternate infinite;
+}
+
+.nudgingRev{
+	animation: nudgePeer .1s linear alternate-reverse infinite;
 }
 
 .img{
@@ -31,26 +48,62 @@
 }
 
 .actionContainer{
-    align-items: center;
-    -webkit-flex-grow: 1;
-    flex-grow: 1;
-    min-width: 0;
-    display: -webkit-flex;
-    display: flex;
-    -webkit-flex-direction: row;
-    flex-direction: row;
-    -webkit-justify-content: center;
-    justify-content: center;
+	align-items: center;
+	-webkit-flex-grow: 1;
+	flex-grow: 1;
+	min-width: 0;
+	display: -webkit-flex;
+	display: flex;
+	-webkit-flex-direction: row;
+	flex-direction: row;
+	-webkit-justify-content: center;
+	justify-content: center;
 }
 
 .nameContainer span{
-    overflow: hidden;
-    position: relative;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+	overflow: hidden;
+	position: relative;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	font-weight: bold;
 }
 
 .mSpacer {
 	flex: 1 1 auto;
+}
+
+.one {
+	opacity: 0;
+	-webkit-animation: dot 1.3s infinite;
+	-webkit-animation-delay: 0.0s;
+	animation: dot 1.3s infinite;
+	animation-delay: 0.0s;
+}
+
+.two {
+	opacity: 0;
+	-webkit-animation: dot 1.3s infinite;
+	-webkit-animation-delay: 0.2s;
+	animation: dot 1.3s infinite;
+	animation-delay: 0.2s;
+}
+
+.three {
+	opacity: 0;
+	-webkit-animation: dot 1.3s infinite;
+	-webkit-animation-delay: 0.3s;
+	animation: dot 1.3s infinite;
+	animation-delay: 0.3s;
+}
+
+@-webkit-keyframes dot {
+	  0% { opacity: 0; }
+	 50% { opacity: 0; }
+	100% { opacity: 1; }
+}
+
+@keyframes dot {
+	  0% { opacity: 0; }
+	 50% { opacity: 0; }
+	100% { opacity: 1; }
 }

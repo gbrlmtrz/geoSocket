@@ -6,7 +6,7 @@
 			</button>
 			<h1 class="title">{{ Lang.lang.app.title }} {{ Channel.channelName ? '@ '+Channel.channelName : ''}}</h1>
 			<span class="mToolbarSpacer"></span>
-			<button mat-icon-button>
+			<button mat-icon-button (click)="share()">
 				<mat-icon *ngIf="isOnline">share</mat-icon>
 			</button>
 			<mat-icon *ngIf="!isOnline">signal_wifi_off</mat-icon>
@@ -15,6 +15,11 @@
 			</button>
 			<mat-menu #menu="matMenu">
 				<button mat-menu-item (click)="openNamePickerDialog()">{{Lang.lang.app.changeName}}</button>
+				<div mat-menu-item>
+					<mat-slide-toggle name="notifications" [(ngModel)]="Notification.isGranted" labelPosition="before" (change)="toggleNotifications()">
+						{{Lang.lang.app.showNotifications}}
+					</mat-slide-toggle>
+				</div>
 				<mat-divider></mat-divider>
 				<button mat-menu-item (click)="exit()">{{Lang.lang.app.exit}}</button>
 			</mat-menu>
@@ -34,6 +39,15 @@
 			</div>
 			<div id="keyboard">
 				<div id="visualKeyboard" [class.quoteO]="Quote != null">					
+					<div id="imgPreview" *ngIf="PhotoPreview != null">
+						<div class="quoteSpacer"></div>
+						<div id="previewCont">
+							<img alt="preview" [class]="PhotoPreview.filter" [src]="PhotoPreview.url"/>
+						</div>
+						<button mat-icon-button type="button" (click)="PhotoPreview = null">
+							<mat-icon>clear</mat-icon>
+						</button>
+					</div>
 					<div id="quote" *ngIf="messagePayload.media != null || Quote != null">
 						<div class="quoteSpacer" *ngIf="messagePayload.media == null"></div>
 						<div id="audioPreview" *ngIf="messagePayload.media">
@@ -50,8 +64,8 @@
 						<div class="quoteSpacer" *ngIf="Quote == null"></div>
 					</div>
 					<form id="text" #mForm="ngForm" (ngSubmit)="sendMessage()">
-						<button mat-icon-button *ngIf="isLandscape">
-							<mat-icon>mood</mat-icon>
+						<button mat-icon-button type="button" (click)="openPhotoBoot()">
+							<mat-icon>photo_camera</mat-icon>
 						</button>
 						<div id="inputarea">
 							<div id="inputPlaceholder" [style.visibility]="!messagePayload.message || messagePayload.message.length == 0 ? 'visible' : 'hidden'">
@@ -65,8 +79,9 @@
 					</form>
 				</div>
 				<button mat-fab (click)="toggleRecording()" (press)="startRecording()" (pressup)="stopRecording()" color="accent">
-					<mat-icon [style.display]="Media.isRecordingAudio ? 'none' : 'inline-block'">mic</mat-icon>
-					<mat-icon [style.display]="Media.isRecordingAudio ? 'inline-block' : 'none'" class="rec">stop</mat-icon>
+					<mat-icon *ngIf="!Media.isProcesingAudio && !Media.isRecordingAudio">mic</mat-icon>
+					<mat-icon *ngIf="!Media.isProcesingAudio && Media.isRecordingAudio" class="rec">stop</mat-icon>
+					<mat-progress-spinner *ngIf="Media.isProcesingAudio" diameter="20" class="centeredSpinner" mode="indeterminate"></mat-progress-spinner>
 				</button>
 			</div>
 		</mat-sidenav-content>

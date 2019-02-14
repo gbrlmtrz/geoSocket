@@ -1,5 +1,6 @@
 import { Component, Inject, EventEmitter, Input, Output } from '@angular/core';
 import { LangService } from '@Services/lang.service';
+import { RTCService } from '@Services/rtc.service';
 import { Presentation } from '@Interfaces/Events/PresentationEvent';
 
 @Component({
@@ -20,7 +21,7 @@ export class ConnectedPeer {
 	
 	disableNudge : boolean = false;
 	
-	constructor(public Lang : LangService) {
+	constructor(public Lang : LangService, public RTC : RTCService) {
 			
 	}
 

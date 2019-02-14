@@ -1,26 +1,15 @@
 "use strict";
 const { deserialize, serialize } = require('bson');
 const { inflate, deflate } = require('pako');
-//const ports = new Map();
 
-//console.log(this);
 const that = self;
 let Socket;
-let tryReconnect = true;
-let reconnectTimeout;
-let URL;
-let times = 0;
 let channel;
 
 const deflateData = function(arrayBufer){
 	const uint8array = new Uint8Array(arrayBufer);
 	const deflated = inflate(uint8array);
 	const payload = deserialize(deflated);
-	tryReconnect = payload.event != "terminated";
-	if(payload.event == "channel"){
-		channel = payload.payload.channel.id;
-	}
-	
 	postMessage({intent: "message", payload: payload});
 };
 
@@ -40,24 +29,14 @@ const onError = function(){
 	postMessage({intent : "error"});
 };
 
-const reconnectTimeoutFN = function(){
-	createSocket(URL);
-	reconnectTimeout = setTimeout(reconnectTimeoutFN, times * 5000);
-};
-
 const onClose = function(){
 	postMessage({intent : "close" });
-	if(tryReconnect){
-		reconnectTimeout = setTimeout(reconnectTimeoutFN, times * 5000);
-	}
+	Socket.close();
+	close();
 };
 
 const onOpen = function(){
 	postMessage({intent : "open" });
-	if(reconnectTimeout != null){
-		clearTimeout(reconnectTimeout);
-		times = 0;
-	}
 	Socket.addEventListener("close", onClose);
 	Socket.addEventListener("error", onError);
 	Socket.addEventListener("message", onSMessage);
@@ -72,7 +51,6 @@ const createSocket = function(url){
 		Socket.close();
 	Socket = new WebSocket(conUrl);
 	Socket.addEventListener("open", onOpen);
-	times++;
 };
 
 const onMessage = function(e){

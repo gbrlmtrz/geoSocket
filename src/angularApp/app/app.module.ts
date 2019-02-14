@@ -9,6 +9,10 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from '@Components/app.component';
 import { NamePickerDialog } from '@Components/Dialogs/NamePickerDialog'; 
 import { ConnectingDialog } from '@Components/Dialogs/ConnectingDialog'; 
+import { CallDialog } from '@Components/Dialogs/CallDialog'; 
+import { PhotoBoot } from '@Components/Dialogs/PhotoBoot'; 
+import { DialDialog } from '@Components/Dialogs/DialDialog'; 
+import { ReconnectDialog } from '@Components/Dialogs/ReconnectDialog'; 
 import { ConnectedPeer } from '@Components/ConnectedPeer'; 
 import { Message } from '@Components/Message'; 
 import { Quote } from '@Components/Quote'; 
@@ -23,13 +27,21 @@ import { ContenteditableModule } from 'ng-contenteditable';
 		AppComponent,
 		NamePickerDialog,
 		ConnectingDialog,
+		ReconnectDialog,
+		CallDialog,
+		DialDialog,
+		PhotoBoot,
 		ConnectedPeer,
 		Message,
 		Quote
 	],
 	entryComponents: [
 		NamePickerDialog,
-		ConnectingDialog
+		ConnectingDialog,
+		ReconnectDialog,
+		CallDialog,
+		PhotoBoot,
+		DialDialog
 	],
 	imports: [
 		//WorkerAppModule ,

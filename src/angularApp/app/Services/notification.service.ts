@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { MatSnackBar } from '@angular/material';
 import { VisibilityService } from '@Services/visibility.service';
 
 @Injectable({
@@ -15,7 +16,22 @@ export class NotificationService {
 	};
 	private _requestLock : boolean = false;
 	
-	constructor(private _Visibility : VisibilityService){
+	constructor(
+		private _Visibility : VisibilityService,
+		private _SnackBar: MatSnackBar
+	){
+	}
+	
+	get hasAskedBefore() : boolean{
+		return (<any> localStorage).getItem("notification.hasAskedBefore") || false;
+	}
+	
+	get enabled() : boolean{
+		return (<any> localStorage).getItem("notification.enabled") || false;
+	}
+	
+	set enabled(value : boolean){
+		(<any> localStorage).setItem("notification.enabled", value);
 	}
 	
 	get isGranted(){
@@ -23,12 +39,13 @@ export class NotificationService {
 	}
 	
 	sendNotification(tag : string, notification : any) : void{
-		this._queue.set(tag, {...this._preLoaded, ...notification, tag});
+		const obj = {...this._preLoaded, ...notification, tag};
+		this._queue.set(tag, obj);
 		this.startWork();
 	}
 	
 	private _sendToast(notification){
-		
+		this._SnackBar.open(notification.body, null, {duration: 2000});
 	}
 	
 	private _timeoutFun(){
@@ -38,10 +55,10 @@ export class NotificationService {
 			if(i != this._queue.size)
 				delete value.vibrate;
 			
-			const {title, ...options} = value;
-			if(this._Visibility.isItVisible)
+			if(this._Visibility.isItVisible && value.isToast){
 				this._sendToast(value);
-			else if(this.isGranted){
+			}else if(this.isGranted && value.isNotification){
+				const {title, ...options} = value;
 				let n = new Notification(title, options);
 				n.onclick = () => {
 					window.focus();
@@ -54,6 +71,8 @@ export class NotificationService {
 	}
 	
 	startWork(){
+		if(!this.enabled) return;
+		
 		if(this._timeout != null)
 			clearTimeout(this._timeout);
 		
@@ -71,15 +90,15 @@ export class NotificationService {
 		if(this._requestLock || !("Notification" in window) || Notification.permission == "granted") return;
 		
 		this._requestLock = true;
-		
+		(<any> localStorage).setItem("notification.hasAskedBefore", true);
 		Notification.requestPermission()
 		.then( (awnser) => {
-			console.log(awnser);
 			this._requestLock = false;
+			(<any> localStorage).setItem("notification.enabled", true);
 		})
 		.catch( (e) => {
-			console.log(e);
 			this._requestLock = false;
+			(<any> localStorage).setItem("notification.enabled", false);
 		});
 	}
 }

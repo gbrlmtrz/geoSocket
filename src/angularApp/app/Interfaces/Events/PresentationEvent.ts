@@ -4,7 +4,10 @@ export interface Presentation{
 	id? : string,
 	name? : string,
 	picture? : string,
-	color? : string
+	color? : string,
+	nudging? : boolean,
+	typing? : boolean,
+	onCall? : boolean
 }
 
 export default interface PresentationEvent extends Event{

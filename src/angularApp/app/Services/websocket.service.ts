@@ -23,9 +23,6 @@ export class WebsocketService {
 	private _connectionData : ConnectionPayload;
 	private _wsURL : string;
 	private _online : boolean = false;
-	private _tryReconnect : boolean = true;
-	private _reconnectTimeout;
-	private _times : number = 0;
 	
 	private _onlineObservers : Observer<any>[] = [];
 	private _messagesObservers : Observer<any>[] = [];
@@ -41,7 +38,7 @@ export class WebsocketService {
 	
 	online$ : Observable<boolean> = new Observable<boolean>( (observer : Observer<any>) => {
 		this._onlineObservers.push(observer);
-		observer.next(this._online);
+		//observer.next(this._online);
 		return {
 			unsubscribe: () => {
 				this._onlineObservers.splice(this._onlineObservers.indexOf(observer), 1);
@@ -50,11 +47,7 @@ export class WebsocketService {
 	});
 	
 	constructor(private _Config: ConfigService) {
-		if(("Worker" in window) || (<any> window).Worker != undefined){
-			this._Worker = new Worker("/socketClient/dist/socketClient.js");
-			this._Worker.onerror = this._onError.bind(this);
-			this._Worker.onmessage = this._onWorkerMessage.bind(this);
-		}else{
+		if(!("Worker" in window) || (<any> window).Worker == undefined){
 			this._withWebSocket = true;
 		}
 	}
@@ -95,6 +88,9 @@ export class WebsocketService {
 	}
 	
 	private _connectWithWorker(){
+		this._Worker = new Worker("/socketClient/dist/socketClient.js");
+		this._Worker.onerror = this._onError.bind(this);
+		this._Worker.onmessage = this._onWorkerMessage.bind(this);
 		this._Worker.postMessage({intent: "connect", url: this._wsURL});
 	}
 	
@@ -102,16 +98,7 @@ export class WebsocketService {
 		const uint8array = new Uint8Array(arrayBuffer);
 		const deflated = inflate(uint8array);
 		const payload = deserialize(deflated);
-		this._tryReconnect = payload.event != "terminated";
-		if(payload.event == "channel"){
-			this._connectionData.channel = payload.payload.channel.id;
-		}
 		this._onMessage(payload);
-	}
-	
-	private _reconnectTimeoutFN(){
-		this.connect$(this._connectionData);
-		this._reconnectTimeout = setTimeout(this._reconnectTimeoutFN, this._times * 5000);
 	}
 	
 	private _connectWithWS(){
@@ -119,16 +106,8 @@ export class WebsocketService {
 		this._Socket = new WebSocket(this._wsURL);
 		this._Socket.addEventListener("open", () => {
 			this.online = true;			
-			if(this._reconnectTimeout != null){
-				clearTimeout(this._reconnectTimeout);
-				this._times = 0;
-			}
-			
 			this._Socket.addEventListener("close", () => {
 				this.online = false;
-				if(this._tryReconnect){
-					this._reconnectTimeout = setTimeout(this._reconnectTimeoutFN, this._times * 5000);
-				}
 			});
 			
 			this._Socket.addEventListener("error", () => this.online = false );
@@ -145,7 +124,6 @@ export class WebsocketService {
 				}
 			});
 		});
-		this._times++;
 	}
 	
 	private _connect() : void{
@@ -161,10 +139,6 @@ export class WebsocketService {
 			this._Worker.postMessage({intent: "close"});
 			this._Worker = null;
 		}
-		//this._onlineObservers.forEach( obs => obs.complete() );
-		//this._messagesObservers.forEach( obs => obs.complete() );
-		//this._onlineObservers = [];
-		//this._messagesObservers = [];
 	}
 	
 	sendMessage(event : Event) : void{
@@ -186,6 +160,4 @@ export class WebsocketService {
 		this._connect();
 		return this.online$;
 	}
-	
-	
 }

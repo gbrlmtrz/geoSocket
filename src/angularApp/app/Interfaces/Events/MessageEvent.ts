@@ -1,4 +1,5 @@
 import Event from "@Interfaces/Event";
+import { Photo } from "@Interfaces/Photo";
 import { Presentation } from "@Interfaces/Events/PresentationEvent"
 
 export interface Message{
@@ -6,6 +7,7 @@ export interface Message{
 	message? : string;
 	quote? : Message;
 	media? : any;
+	photo? : Photo;
 	sender? : Presentation;
 	byMe? : boolean;
 	firstOf? : boolean;
@@ -14,11 +16,12 @@ export interface Message{
 }
 
 export interface MessagePayload{
-	id? : string,
-	message? : string,
-	media? : any,
-	quote? : string,
-	date? : number
+	id? : string;
+	message? : string;
+	media? : any;
+	quote? : string;
+	date? : number;
+	photo? : Photo;
 }; 
 
 export default interface MessageEvent extends Event{

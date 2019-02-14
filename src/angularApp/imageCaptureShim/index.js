@@ -6,6 +6,7 @@ export const ImageCaptureShim = class {
      * @param {MediaStreamTrack} videoStreamTrack - A MediaStreamTrack of the 'video' kind
      */
     constructor(videoStreamTrack) {
+	this.filter = "none"; 
       if (videoStreamTrack.kind !== 'video')
         throw new DOMException('NotSupportedError');
 
@@ -88,6 +89,10 @@ export const ImageCaptureShim = class {
      * @return {Promise<Blob>} Fulfilled promise with [Blob](https://www.w3.org/TR/FileAPI/#blob)
      * argument on success; rejected promise on failure
      */
+	setFilter(f){
+		this.filter = f;
+	}
+	 
     takePhoto() {
       const self = this;
       return new Promise(function executorTP(resolve, reject) {
@@ -100,6 +105,7 @@ export const ImageCaptureShim = class {
           try {
             self.canvasElement.width = self.videoElement.videoWidth;
             self.canvasElement.height = self.videoElement.videoHeight;
+			self.canvas2dContext.filter = self.filter;
             self.canvas2dContext.drawImage(self.videoElement, 0, 0);
 			self.canvasElement.toBlob(resolve);
           } catch (error) {

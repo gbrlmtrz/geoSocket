@@ -120,12 +120,10 @@ export class CompresorService {
 		return new Promise( (resolve, reject) => {
 			if(this._withSharedWorker){
 				const _uuid = uuid();
-				
 				this._resolvers.set(_uuid, resolve);
 				this._Port.postMessage({intent: "compress", payload: data, uuid: _uuid});
 			}else if(this._withWorker){
 				const _uuid = uuid();
-				
 				this._resolvers.set(_uuid, resolve);
 				this._Worker.postMessage({intent: "compress", payload: data, uuid: _uuid});
 			}

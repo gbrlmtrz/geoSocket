@@ -1,3 +1,4 @@
+import { isDevMode } from '@angular/core';
 import { Injectable, PLATFORM_ID, Inject } from '@angular/core';
 import { isPlatformBrowser, isPlatformServer } from '@angular/common';
 
@@ -8,16 +9,16 @@ export class ConfigService{
 
 	constructor(@Inject(PLATFORM_ID) private platformId: Object) { }
 
+	get URL(){
+		return isDevMode() ? "https://localhost:8080/" : "https://sixdegreesnear.com/";
+	}
+	
 	get API(){
-		if(isPlatformBrowser(this.platformId)){
-			return "http://localhost:8082/"
-		}else{
-			return "http://localhost:8082/";
-		}
+		return isDevMode() ? "https://localhost:8082/" : "https://sixdegreesnear.com/api/";
 	}
 	
 	get WS(){
-		return "wss://localhost:8082/socket?";
+		return isDevMode() ? "wss://localhost:8082/socket?" : "https://sixdegreesnear.com/socket?";
 	}
 	
 }

@@ -54,7 +54,10 @@ export class RTCService {
 	
 	isSupported : boolean = false;
 	busy : boolean = false;
-	private _LocalStream;
+	private isOfferer : boolean = false;
+	private _reNeg : boolean = false;
+	LocalStream;
+	Channel;
 	private _peerConnection;
 	private _ICEConfig = [
 		{
@@ -67,29 +70,29 @@ export class RTCService {
 		}
 	];
 	
-	private _remoteTrack;
-	private _remoteStream;
+	remoteTrack;
+	remoteStream;
 	
-	private _remoteTrackObservers : Observer<any>[] = [];
+	private remoteTrackObservers : Observer<any>[] = [];
 	remoteTrack$  : Observable<any> = new Observable<any>( (observer : Observer<any>) => {
-		this._remoteTrackObservers.push(observer);
-		if(this._remoteTrack) observer.next(this._remoteTrack);
+		this.remoteTrackObservers.push(observer);
+		if(this.remoteTrack) observer.next(this.remoteTrack);
 		
 		return {
 			unsubscribe: () => {
-				this._remoteTrackObservers.splice(this._remoteTrackObservers.indexOf(observer), 1);
+				this.remoteTrackObservers.splice(this.remoteTrackObservers.indexOf(observer), 1);
 			}
 		};
 	});
 	
-	private _remoteStreamObservers : Observer<any>[] = [];
+	private remoteStreamObservers : Observer<any>[] = [];
 	remoteStream$  : Observable<any> = new Observable<any>( (observer : Observer<any>) => {
-		this._remoteTrackObservers.push(observer);
-		if(this._remoteStream) observer.next(this._remoteStream);
+		this.remoteTrackObservers.push(observer);
+		if(this.remoteStream) observer.next(this.remoteStream);
 		
 		return {
 			unsubscribe: () => {
-				this._remoteStreamObservers.splice(this._remoteStreamObservers.indexOf(observer), 1);
+				this.remoteStreamObservers.splice(this.remoteStreamObservers.indexOf(observer), 1);
 			}
 		};
 	});
@@ -100,6 +103,36 @@ export class RTCService {
 		return {
 			unsubscribe: () => {
 				this._ICEObservers.splice(this._ICEObservers.indexOf(observer), 1);
+			}
+		};
+	});
+	
+	private _OfferObservers : Observer<any>[] = [];
+	Offer$  : Observable<any> = new Observable<any>( (observer : Observer<any>) => {
+		this._OfferObservers.push(observer);
+		return {
+			unsubscribe: () => {
+				this._OfferObservers.splice(this._OfferObservers.indexOf(observer), 1);
+			}
+		};
+	});
+	
+	private _AcceptObservers : Observer<any>[] = [];
+	Accept$  : Observable<any> = new Observable<any>( (observer : Observer<any>) => {
+		this._AcceptObservers.push(observer);
+		return {
+			unsubscribe: () => {
+				this._AcceptObservers.splice(this._AcceptObservers.indexOf(observer), 1);
+			}
+		};
+	});
+	
+	private _ChannelMessagesObservers : Observer<any>[] = [];
+	channelMessages$  : Observable<any> = new Observable<any>( (observer : Observer<any>) => {
+		this._ChannelMessagesObservers.push(observer);
+		return {
+			unsubscribe: () => {
+				this._ChannelMessagesObservers.splice(this._ChannelMessagesObservers.indexOf(observer), 1);
 			}
 		};
 	});
@@ -116,28 +149,56 @@ export class RTCService {
 	}
 	
 	private _handleICEConnectionStateChangeEvent(event){
-		console.log("this", this);
-		switch(this._peerConnection.iceConnectionState) {
-            case "closed":
-            case "failed":
-            case "disconnected":
-                this.close();
-        }
+		if(this._peerConnection != null)
+			switch(this._peerConnection.iceConnectionState) {
+				case "closed":
+				case "failed":
+				case "disconnected":
+					//this.close();
+					break;
+			}
+	}
+	
+	private _handleConnectionChangeEvent(event){
+		if(this._peerConnection != null)
+			switch (this._peerConnection.connectionState) {
+				case "closed":
+				case "failed":
+				case "disconnected":
+					this.close();
+					break;
+			}
 	}
 	
 	private _handleSignalingStateChangeEvent(event){
-		switch (this._peerConnection.signalingState) {
-            case "closed":
-                this.close();
-        }
+		if(this._peerConnection != null){
+			switch (this._peerConnection.signalingState) {
+				case "stable":
+					this._reNeg = false;
+					break;
+				case "closed":
+					this.close();
+					break;
+				default:
+					this._reNeg = true;
+					break;
+			}
+		}
+	}
+	
+	private _handleNegotiationNeededEvent(event){
+		if(this._reNeg) return;
+		this._reNeg = true;
+		//ToDo something that works
+		setTimeout(() => { this.createOffer() }, Math.floor(Math.random() * 2000));
 	}
 	
 	private _onTrack(e){
-		this._remoteTrackObservers.forEach( obs =>{ obs.next(e.streams); } );
+		this.remoteTrackObservers.forEach( obs =>{ obs.next(e.streams); } );
 	}
 	
 	private _onStream(stream){
-		this._remoteStreamObservers.forEach( obs =>{ obs.next(stream); } );
+		this.remoteStreamObservers.forEach( obs =>{ obs.next(stream); } );
 	}
 	
 	connect(){
@@ -146,72 +207,116 @@ export class RTCService {
 		this._peerConnection.onicecandidate = (e) => { this._handleICECandidateEvent.call(this, e); };
         this._peerConnection.oniceconnectionstatechange = (e) => { this._handleICEConnectionStateChangeEvent.call(this, e); };
         this._peerConnection.onsignalingstatechange = (e) => { this._handleSignalingStateChangeEvent.call(this, e); };
+        this._peerConnection.onconnectionstatechange = (e) => { this._handleConnectionChangeEvent.call(this, e); };
+        this._peerConnection.onnegotiationneeded  = (e) => { this._handleNegotiationNeededEvent.call(this, e); };
 		this._peerConnection.ontrack = this._onTrack.bind(this);
 		this._peerConnection.onaddstream = this._onStream.bind(this);
-		if(this._LocalStream){
-			this._peerConnection.addStream(this._LocalStream);
+		this._setUpChannel(
+			this._peerConnection.createDataChannel("channel", {negotiated: true, id: 1})
+		);
+		if(this.LocalStream){
+			this._peerConnection.addStream(this.LocalStream);
 		}
 	}
 	
 	close(){
 		this.busy = false;
-        this._peerConnection.close();
+		this.isOfferer = false;
+		this._reNeg = false;
+		if(this._peerConnection != null)
+			this._peerConnection.close();
         this._peerConnection = null;
+		this.Channel = null;
+	}
+	
+	private _addTimeout;
+	
+	private _onChannelOpen(event){
+		
+	}
+	
+	private _onChannelMessage(event){
+		const data = JSON.parse(event.data);
+		this._ChannelMessagesObservers.forEach( obs => obs.next(data) );
+	}
+	
+	private _setUpChannel(channel){
+		this.Channel = channel;
+		this.Channel.onopen = this._onChannelOpen.bind(this);
+		this.Channel.onmessage = this._onChannelMessage.bind(this);
+	}
+	
+	sendChannelMessage(data){
+		this.Channel.send(JSON.stringify(data));
 	}
 	
 	addLocalStream(stream){
-		this._LocalStream = stream;
-		if(this._peerConnection)
-			this._peerConnection.addStream(stream);
+		if(this._addTimeout) clearTimeout(this._addTimeout);
+		this.LocalStream = stream;
+		if(this._peerConnection){
+			if(this._reNeg)
+				this._addTimeout = setTimeout(() => { this.addLocalStream(stream); }, 1000)
+			else{
+				this._peerConnection.addStream(stream);
+				this._addTimeout = null;
+			}
+		}
 	}
 	
-	createOffer() : Promise<any>{
-		if(this.busy) return;
-		return new Promise( (resolve, reject) => {			
-			this._peerConnection
-			.createOffer()
-			.then(offer => {
-				return this._peerConnection.setLocalDescription(offer);
-			})
-			.then(() => {
-				this.busy = true;
-				resolve(this._peerConnection.localDescription);
-			})
-			.catch(reject);
-		});
-	}
-	
-	acceptOffer(sdp) : Promise<any>{
-		if(this.busy) return;
+	createOffer(){
+		this.isOfferer = true;	
 		if(!this._peerConnection) this.connect();
-		return new Promise( (resolve, reject) => {			
-			this._peerConnection
-				.setRemoteDescription(new RTCSessionDescription(sdp))
-				.then(() => this._peerConnection.createAnswer())
-				.then(answer => {
-					return this._peerConnection.setLocalDescription(answer);
-				})
-				.then(() => {
-					this.busy = true;
-					resolve(this._peerConnection.localDescription);
-				})
-				.catch((e) => { console.error(e); reject(e);} );
+		
+		this._peerConnection
+		.createOffer()
+		.then( (offer) => {
+			return this._peerConnection.setLocalDescription(offer);
+		})
+		.then(() => {
+			this.busy = true;
+			this._OfferObservers.forEach( obs =>{ obs.next(this._peerConnection.localDescription); } );
+		})
+		.catch((e) => {
+			console.log(e);
+			//DoWhatsNecesary for a restart of the connection
 		});
 	}
 	
-	offerAcepted(sdp){
+	private _acceptOffer(sdp){
+		if(!this._peerConnection) this.connect();
+		this._peerConnection.setRemoteDescription(new RTCSessionDescription(sdp))
+		.then(() => {
+			return this._peerConnection.createAnswer()
+		})
+		.then((answer) => {
+			return this._peerConnection.setLocalDescription(answer);
+		})
+		.then(() => {
+			this.busy = true;
+			this._AcceptObservers.forEach( obs =>{ obs.next(this._peerConnection.localDescription); } );
+		})
+		.catch((e) => {
+			console.log(e);
+			//DoWhatsNecesary for a restart of the connection
+		});
+	}
+	
+	private _offerAcepted(sdp){
 		if(!this._peerConnection) return;
-		console.log("offerAcepted", sdp);
-		this._peerConnection
-			.setRemoteDescription(new RTCSessionDescription(sdp))
-			.then(function(){
-				console.log("args", arguments);
-			})
-			.catch((err) => {console.error(err)});
+		this._peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
     }
 	
+	onSDP(sdp){ 
+		const desc = new RTCSessionDescription(sdp);
+		if (desc.type == "offer") {
+			this._acceptOffer(sdp);
+		}else{
+			this._offerAcepted(sdp);
+		}
+	}
+	
 	newICECandidate(candidate){
-		if(!this._peerConnection) return;
+		if(!this._peerConnection || this._reNeg) return;
 		this._peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
 	}
 

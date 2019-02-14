@@ -1,8 +1,12 @@
+import { isDevMode } from '@angular/core';
 import { Component, OnInit, ViewChild, HostListener } from '@angular/core';
 import { MatDialog } from '@angular/material';
+import { sprintf } from 'sprintf-js';
+import { ActivatedRoute } from '@angular/router';
 import { LangService } from '@Services/lang.service';
 import { MediaService } from '@Services/media.service';
 import { RTCService } from '@Services/rtc.service';
+import { ConfigService } from '@Services/config.service';
 import { CompresorService } from '@Services/compresor.service';
 import { IdentityService } from '@Services/identity.service';
 import { GeoLocationService } from '@Services/geolocation.service';
@@ -11,11 +15,16 @@ import { VisibilityService } from '@Services/visibility.service';
 import { WebsocketService } from '@Services/websocket.service';
 import { DomSanitizer } from '@angular/platform-browser';
 import GeoPos from '@Interfaces/GeoPos';
+import { Photo } from '@Interfaces/Photo';
 import { Subscription } from 'rxjs';
 import ConnectionPayload from '@Interfaces/ConnectionPayload';
 import { default as MessageEvent, MessagePayload, Message } from '@Interfaces/Events/MessageEvent';
 import { NamePickerDialog } from '@Components/Dialogs/NamePickerDialog';
 import { ConnectingDialog } from '@Components/Dialogs/ConnectingDialog';
+import { ReconnectDialog } from '@Components/Dialogs/ReconnectDialog';
+import { CallDialog } from '@Components/Dialogs/CallDialog';
+import { DialDialog } from '@Components/Dialogs/DialDialog';
+import { PhotoBoot } from '@Components/Dialogs/PhotoBoot';
 import { default as PresentationEvent, Presentation} from '@Interfaces/Events/PresentationEvent';
 import deepEqual from 'deep-equal';
 import ChannelI from '@Interfaces/Channel';
@@ -23,7 +32,6 @@ import nanoid from 'nanoid';
 
 declare const URL;
 
- 
 @Component({
 	selector: 'app-root',
 	templateUrl: './app.component.html',
@@ -61,18 +69,6 @@ export class AppComponent {
 	
 	posSubscription;
 	pictures : string[] = [];
-	classes : string[] = [
-		"filter-1977",
-		"filter-amaro",
-		"filter-crema",
-		"filter-hefe",
-		"filter-inkwell",
-		"filter-kelvin",
-		"filter-lofi",
-		"filter-poprocket",
-		"filter-sutro",
-		"filter-xpro-ii"
-	];
 	
 	private _geoSub;
 	private _geoSubscription = {
@@ -96,6 +92,17 @@ export class AppComponent {
 		});
 	}
 	
+	private _reconnectDialogRef;
+	private _openReconnectDialog(reason : string = ""){
+		if(this._reconnectDialogRef != null) return;
+		this._reconnectDialogRef = this._Dialog.open(ReconnectDialog, {disableClose: true, data: {reason}});
+		this._reconnectDialogRef.afterClosed()
+		.subscribe( () => {
+			this._reconnectDialogRef = null;
+			this._beginConnection();
+		});
+	}
+	
 	isOnline : boolean;
 	private _socketOnlineSubscriber = {
 		next : (online : boolean) => {
@@ -110,7 +117,15 @@ export class AppComponent {
 				this._sendPresentation();
 				this._geoSub = this._GeoLocation.positions$.subscribe(this._geoSubscription);
 			}else{
-				this._openConnectingDialog();
+				this.Users.clear();
+				this._MessageDictionary.clear();
+				this.Messages = [];
+				this.messagePayload = {};
+				this.Channel = {};
+				this.PhotoPreview = null;
+				this.Quote = null;
+				this.audioBlobURL = null;
+				this._openReconnectDialog();
 				if(this._geoSub){
 					this._geoSub.unsubscribe();
 					this._geoSub = null;
@@ -131,23 +146,121 @@ export class AppComponent {
 	Messages : Message[] = [];
 	Quote : Message;
 	
+	private inCallWith : Presentation;
+	private _RTCICESubscriber = {
+		next : (ice) => {
+			if(this.inCallWith == null) return;
+			
+			this._Websocket.sendMessage(
+			{
+				event: "ice", 
+				payload: { 
+					ice : { 
+						candidate : ice.candidate,
+						sdpMid : ice.sdpMid,
+						sdpMLineIndex: ice.sdpMLineIndex
+					}, 
+					to : this.inCallWith.id 
+				}
+			});
+		}
+	};
+	
+	private _RTCOfferSubscriber = {
+		next : (sdp) => {
+			if(this.inCallWith == null) return;
+			
+			this._Websocket.sendMessage({
+				event: "rtcoffer", 
+				payload: { 
+					sdp : { sdp : sdp.sdp, type : sdp.type }, 
+					to : this.inCallWith.id
+				}
+			});
+		}
+	};
+	
+	private _RTCAcceptSubscriber = {
+		next : (sdp) => {
+			this._Websocket.sendMessage({
+				event: "rtcaccept", 
+				payload: { 
+					sdp : { 
+						sdp : sdp.sdp, 
+						type : sdp.type
+					}, 
+					to : this.inCallWith.id
+				}
+			});
+		}
+	};
+	
 	private _messagesSubscriber = {
-		next : data => {			
-			console.log("event", data);
+		next : data => {
 			switch(data.event){
+				case "channelSwitch":
+					this.Users.clear();
+					this._MessageDictionary.clear();
+					this.Messages = [];
+					this.messagePayload = {};
+					this.Quote = null;
+					this.Notification.sendNotification(`channelSwitch_${data.sender}`, {
+						title : this.Lang.lang.NotificationTitles.nudge,
+						body : sprintf(this.Lang.lang.NotificationBodies.nudge, this.Users.get(data.sender).name),
+						icon : `${this._Config.URL}assets/avatars/${this.Users.get(data.sender).picture}.svg`,
+						isToast : true,
+						isNotification : true
+					});
+					break;
+				case "terminated":
+					this._openReconnectDialog(this.Lang.lang.DisconnectReasons.openedInAnotherTab);
+					break;
 				case "nudge":
 					if(this._nudgeTimeout)
 						clearTimeout(this._nudgeTimeout);
 					this.nudging = true;
+					
+					this.Users.get(data.sender).nudging = true;
+					setTimeout(() => {
+						this.Users.get(data.sender).nudging = false;
+					}, 2000);
+					
 					this._nudgeTimeout = setTimeout( () => {
 						this.nudging = false;
 					} , 2000);
+					
+					this.Notification.sendNotification(`nudge_${data.sender}`, {
+						title : this.Lang.lang.NotificationTitles.nudge,
+						body : sprintf(this.Lang.lang.NotificationBodies.nudge, this.Users.get(data.sender).name),
+						icon : `${this._Config.URL}assets/avatars/${this.Users.get(data.sender).picture}.svg`,
+						isToast : true,
+						isNotification : true
+					});
 					break;
 				case "message":
-					if(data.sender != this._myID)
+					if(data.sender != this._myID){
+						
+						let title, body;
+						if(data.payload.message){
+							title = sprintf(this.Lang.lang.NotificationTitles.message, this.Users.get(data.sender).name);
+							body = data.payload.message;
+						}else{
+							title = sprintf(this.Lang.lang.NotificationTitles.voiceNote, this.Users.get(data.sender).name);
+							body = sprintf(this.Lang.lang.NotificationBodies.voiceNote, this.Users.get(data.sender).name);
+						}
+						
+						this.Notification.sendNotification(`message_${data.sender}`, {
+							title,
+							body,
+							icon : `${this._Config.URL}assets/avatars/${this.Users.get(data.sender).picture}.svg`,
+							isToast : false,
+							isNotification : true
+						});
+						
 						this._addMessage(data.payload, data.sender);
-					else if(this._MessageDictionary.has(data.payload.id))
+					}else if(this._MessageDictionary.has(data.payload.id)){
 						this._MessageDictionary.get(data.payload.id).recieved = true;
+					}
 					break;
 				case "yourID":
 					this._myID = data.payload.id;
@@ -168,33 +281,123 @@ export class AppComponent {
 					}
 					break;
 				case "disconnect":
+					this.Notification.sendNotification(`disconnect_${data.sender}`, {
+						title : this.Lang.lang.NotificationTitles.disconnected,
+						body : sprintf(this.Lang.lang.NotificationBodies.disconnected, this.Users.get(data.payload.peer).name),
+						icon : `${this._Config.URL}assets/avatars/${this.Users.get(data.payload.peer).picture}.svg`,
+						isToast : true,
+						isNotification : true
+					});
+					
+					if(this.inCallWith != null && data.payload.peer == this.inCallWith.id){
+						this._closeCallDialog(this.Lang.lang.call.disconnected);
+						this._closeCallRequestDialog(this.Lang.lang.call.disconnected);
+						this._closePickUpDialog(this.Lang.lang.call.disconnected);
+					}
+					
 					if(this.Users.has(data.payload.peer))
 						this.Users.delete(data.payload.peer);
 					break;
 				case "newPeer":
 					this.Users.set(data.payload.id, {id: data.payload.id, ...this._Anonymous});
-					/*to = data.payload.id;
-					this._RTC.connect();
-					this._RTC.createOffer()
-					.then( (sdp) => {
-						this._Websocket.sendMessage({event: "rtccall", payload: { sdp : { sdp : sdp.sdp, type : sdp.type }, to : data.payload.id}});
-					});*/
 					break;
 				case "presentation":
-					this.Users.set(data.sender, {...data.payload});
+					if(this.Users.has(data.sender)){
+						this.Notification.sendNotification(`presentation_${data.sender}`, {
+							title : this.Lang.lang.NotificationTitles.nameChange,
+							body : sprintf(this.Lang.lang.NotificationBodies.nameChange, this.Users.get(data.sender).name, data.payload.name),
+							icon : `${this._Config.URL}assets/avatars/${this.Users.get(data.sender).picture}.svg`,
+							isToast : true,
+							isNotification : true
+						});
+					}else{
+						this.Notification.sendNotification(`presentation_${data.sender}`, {
+							title : this.Lang.lang.NotificationTitles.newUser,
+							body : sprintf(this.Lang.lang.NotificationBodies.newUser, data.payload.name),
+							icon : `${this._Config.URL}assets/avatars/${this.Users.get(data.sender).picture}.svg`,
+							isToast : true,
+							isNotification : true
+						});
+					}
+					
+					this.Users.set(data.sender, {id: data.sender, ...data.payload});
 					break;
-				/*case "ice":
+				case "incall":
+					if(this.Users.has(data.sender))
+						this.Users.get(data.sender).onCall = data.payload.incall;
+					break;
+				case "istyping":
+					if(this.Users.has(data.sender))
+						this.Users.get(data.sender).typing = data.payload.istyping;
+					break;
+				case "hangup":
+					if(this.inCallWith == null || data.sender != this.inCallWith.id) 
+						return;
+					this._closeCallDialog(this.Lang.lang.call[data.payload.reason]);
+					break;
+				case "callrequest":
+					if(this.inCallWith != null) 
+						return;
+					
+					this.Notification.sendNotification(`call_${data.sender}`, {
+						title : this.Lang.lang.NotificationTitles.newCall,
+						body : sprintf(this.Lang.lang.NotificationBodies.newCall, this.Users.get(data.sender).name),
+						icon : `${this._Config.URL}assets/avatars/${this.Users.get(data.sender).picture}.svg`,
+						isToast : false,
+						isNotification : true
+					});
+					
+					this._openPickUpDialog(this.Users.get(data.sender));
+					break;
+				case "requestcancelled":
+					if(this.inCallWith == null || data.sender != this.inCallWith.id) 
+						return;
+					
+					this._closePickUpDialog(this.Lang.lang.call.canceled);
+					break;
+				case "callrejected":
+					if(this.inCallWith == null || data.sender != this.inCallWith.id) 
+						return;
+					
+					this._closeCallRequestDialog(this.Lang.lang.call.rejected);
+					break;
+				case "callaccepted":
+					if(this.inCallWith == null || this.inCallWith.id != data.sender) 
+						return;
+					
+					this._dialDialogRef.close();
+					this.Media.startVideoFeed$().subscribe({
+						next : (stream) => {
+							//this._RTC.connect();
+							this._RTC.createOffer();
+							this._RTC.addLocalStream(stream);
+						},
+						error : () => {							
+							this._Websocket.sendMessage({
+								event : "hangup",
+								payload : {
+									to : this.inCallWith.id,
+									reason : "technicalProblems"
+								}
+							});
+							this._closeCallDialog();
+						}
+					});
+					this._openCallDialog();
+					break;
+				case "ice":
+					if(this.inCallWith == null || data.sender != this.inCallWith.id) 
+						return;
+					
 					this._RTC.newICECandidate(data.payload.ice);
 					break;
-				case "rtccall":
-					this._RTC.acceptOffer(data.payload.sdp)
-					.then((sdp) => {
-						this._Websocket.sendMessage({event: "rtcaccept", payload: { sdp : { sdp : sdp.sdp, type : sdp.type }, to : data.sender}});
-					});
-					break;
+				case "rtcoffer":
 				case "rtcaccept":
-					this._RTC.offerAcepted(data.payload.sdp);
-					break;*/
+					if(this.inCallWith == null || data.sender != this.inCallWith.id) 
+						return;
+					
+					this._RTC.onSDP(data.payload.sdp);
+					break;
 			}
 		},
 		error: e => {
@@ -206,13 +409,15 @@ export class AppComponent {
 	};
 	
 	constructor(
+		private _activeRoute: ActivatedRoute,
+		private _Config : ConfigService, 
 		private _Sanitizer : DomSanitizer, 
 		public Lang : LangService, 
 		private _Dialog: MatDialog,
 		private _RTC : RTCService, 
 		public Media : MediaService, 
 		private _Compresor : CompresorService, 
-		private _Notification : NotificationService, 
+		public Notification : NotificationService, 
 		private _Websocket : WebsocketService, 
 		private _Visibility : VisibilityService, 
 		private _Identity : IdentityService, 
@@ -224,9 +429,65 @@ export class AppComponent {
 		return this._Sanitizer.bypassSecurityTrustUrl(url);
 	}
 	
+	toggleNotifications() : void{
+		if(this.Notification.enabled){
+			if(this.Notification.isGranted){
+				this.Notification.startWork();
+			}else{
+				this.Notification.requestPermission();
+			}
+		}else{
+			this.Notification.stopWork();
+		}
+	}
+	
+	private _callDialogRef;
+	private _openCallDialog(){		
+		this._callDialogRef = this._Dialog.open(CallDialog, {
+			data: this.inCallWith,
+			disableClose: true
+		});
+		this._callDialogRef.afterClosed()
+		.subscribe( (result : boolean) => {
+			if(result){
+				this._Websocket.sendMessage({
+					event : "hangup",
+					payload : {
+						to : this.inCallWith.id,
+						reason : "hungup"
+					}
+				});
+			}
+			this._Websocket.sendMessage({
+				event : "incall",
+				payload : {
+					incall : false
+				}
+			});
+			this.Media.stopVideoFeed();
+			this._RTC.close();
+			this.inCallWith = null;
+			this._callDialogRef = null;
+		});
+	}
+	
+	private _closeCallDialog(reason? : string){
+		if(this._callDialogRef == null) return;
+		
+		if(reason)
+			this.Notification.sendNotification(`callcanceled_${this.inCallWith.id}`, {
+				title : this.Lang.lang.NotificationTitles.peerHasHungUp,
+				body : sprintf(reason, this.inCallWith.name),
+				icon : `${this._Config.URL}assets/avatars/${this.inCallWith.picture}.svg`,
+				isToast : true,
+				isNotification : true
+			});
+			
+		this._callDialogRef.close();
+	}
+	
 	ngOnInit() {
 		this._checkIfLandscape();
-		
 		this.User = this._Identity.getUser();
 		if(this.User.name != null){
 			this._beginConnection();
@@ -236,280 +497,28 @@ export class AppComponent {
 			});
 		}
 		
+		//this.inCallWith = this._Anonymous;
+		//this._openCallDialog();
+		
 		this._Websocket.messages$.subscribe(this._messagesSubscriber);
+		this._RTC.ICE$.subscribe(this._RTCICESubscriber);
+		this._RTC.Offer$.subscribe(this._RTCOfferSubscriber);
+		this._RTC.Accept$.subscribe(this._RTCAcceptSubscriber);
 		
-		
-		/*this._Media.startVideoFeed$().subscribe({
-			next : (stream) => {
-				this.myFeed = stream;
-				this._RTC.addLocalStream(this.myFeed);
-				
-				this._Fingerprint.FauxFingerprint()
-				.then( (fingerprint : string) => {
-					
-					this._GeoLocation.getPosition()
-					.then( (position : GeoPos) => {
-						
-						const con : ConnectionPayload = {
-							lat: position.lat,
-							lon: position.lon,
-							pcid: fingerprint
-						};
-						this._Websocket.connect$(con).subscribe({
-							next : (online : boolean) => { 
-								if(online){
-									
-									
-								}
-							}
-						});
-						
-						let to;
-						
-						this._RTC.ICE$.subscribe({
-							next : (ice) => {
-								this._Websocket.sendMessage(
-								{
-									event: "ice", 
-									payload: { 
-										ice : { 
-											candidate : ice.candidate,
-											sdpMid : ice.sdpMid,
-											sdpMLineIndex: ice.sdpMLineIndex
-										}, 
-										to : to 
-									}
-								});
-							}
-						});
-						
-						this._RTC.remoteStream$.subscribe({
-							next : (stream) => {
-								console.log("stream", stream);
-								this.theirFeed = stream[0];
-								
-							}
-						});
-						
-						this._RTC.remoteTrack$.subscribe({
-							next : (track) => {
-								console.log("track", track);
-							}
-						});
-						
-						this._Websocket.messages$.subscribe({
-							next : (data) => {
-								console.log("event", data);
-								switch(data.event){
-									case "newPeer":
-										to = data.payload.id;
-										this._RTC.connect();
-										this._RTC.createOffer()
-										.then( (sdp) => {
-											this._Websocket.sendMessage({event: "rtccall", payload: { sdp : { sdp : sdp.sdp, type : sdp.type }, to : data.payload.id}});
-										});
-										break;
-									case "ice":
-										this._RTC.newICECandidate(data.payload.ice);
-										break;
-									case "rtccall":
-										this._RTC.acceptOffer(data.payload.sdp)
-										.then((sdp) => {
-											this._Websocket.sendMessage({event: "rtcaccept", payload: { sdp : { sdp : sdp.sdp, type : sdp.type }, to : data.sender}});
-										});
-										break;
-									case "rtcaccept":
-										this._RTC.offerAcepted(data.payload.sdp);
-										break;
-								}
-							}
-						});
-						
-					})
-					.catch( (e) => {console.error(e);} );
-					
-				} );
-				
-				
-			}
-		});*/
-		/*const video = document.getElementById("video");
-		this._Video.startCameraFeed$().subscribe({
-			next: (stream) => {
-				
-				(<any> video).srcObject = stream;
-				(<any> video).play();
-				
-				this._Video.photosOutput$.subscribe({
-					next : (photo) => {
-						const reader = new FileReader();
-						reader.onload  = () => {
-							const base64data = reader.result;                
-							this.pictures.push(<string> base64data);
-						};
-						reader.readAsDataURL(photo);
-					}
-				});
-				
-				let i = 0;
-				setTimeout(() => {
-					let inverval = setInterval(() => {
-						if(i > 0){
-							video.classList.remove(this.classes[i-1]);
-						}
-						video.classList.add(this.classes[i]);
-						this._Video.setFilterClass(window.getComputedStyle(video).filter);
-						this._Video.takePhoto();
-						i++;
-					}, 1000);
-					
-					setTimeout( () => {
-						clearInterval(inverval);
-						this._Video.stopCapturing();
-					}, 10000);
-				}, 1000);
-				
-			},
-			complete : () => {
-				(<any> video).pause();
-				(<any> video).removeAttribute('src');
-				(<any> video).load();
-			},
-			error : () => {
-				(<any> video).pause();
-				(<any> video).removeAttribute('src');
-				(<any> video).load();
-			}
-		});*/
-		
-		/*this._Audio.startRecording$().subscribe({
-			next: d => {
-				const reader = new FileReader();
-				 reader.onload  = function() {
-					 const base64data = reader.result;                
-					 console.log(`Compressed old blob ${base64data.length}`);
-				 };
-				 reader.readAsDataURL(d); 
-				
-				this._Compresor.compress(d)
-				.then( (compressedText) => {
-					
-					this._Compresor.decompress(compressedText)
-					.then( (newBlob) => {
-						
-						console.log("newBlob", newBlob);
-						const audioUrl = URL.createObjectURL(newBlob);
-						console.log(audioUrl);
-						const audio = new Audio(audioUrl);
-						audio.play();
-					});
-					
-				});
-				
-			},
-			complete: () => {
-				console.log("Complete");
-			},
-			error: (e) => {
-				console.log(e)
-			}
-		});
-		
-		setTimeout(() => {
-			this._Audio.stopRecording()
-		}, 10 * 1000)*/
-		
-		/*this._Notification.requestPermission();
-		
-		setTimeout( () => {
-			this._Notification.sendNotification(`${Math.random()}`, {title: "Hola", body: "holaaaa!"})
-		}, 5000);
+		if(this.Notification.isGranted && this.Notification.enabled){
+			this.Notification.startWork();
+		}else if(!this.Notification.hasAskedBefore){
+			this.Notification.requestPermission();
+		}
 		
 		this._Visibility.visibility$.subscribe({
 			next : (visible : boolean ) => {
-				console.log(`Is it visible? ${visible}`);
+				this.isItVisible = visible;
 			}
-		});*/
-		
-		/*this._Fingerprint.Fingerprint()
-		.then( (fingerprint : string) => {
-			
-			this._GeoLocation.getPosition()
-			.then( (position : GeoPos) => {
-				
-				const con : ConnectionPayload = {
-					lat: position.lat,
-					lon: position.lon,
-					pcid: fingerprint
-				};
-				this._Websocket.connect$(con).subscribe({
-					next : (online : boolean) => { 
-						if(online){
-							
-							this._Audio.startRecording$().subscribe({
-								next: d => {
-									
-									console.log("recorded", d.size);
-									
-									this._Compresor.compress(d)
-									.then( (compressedText) => {
-										
-										console.log("compressed", compressedText.length);
-										
-										const newMessage : MessageEvent = {
-											event : "message",
-											payload: {
-												media: compressedText
-											}
-										};
-										
-										this._Websocket.sendMessage(newMessage);
-									});
-									
-								},
-								complete: () => {
-									console.log("Complete");
-								},
-								error: (e) => {
-									console.log(e)
-								}
-							});
-							
-							setTimeout(() => {
-								this._Audio.stopRecording()
-							}, 10 * 1000)
-							
-						}
-					}
-				});
-				
-				this._Websocket.messages$.subscribe({
-					next : (data) => {
-						console.log("New message", data);
-						
-						if(data.event == "message"){
-							this._Compresor.decompress(data.payload.media)
-							.then( (newBlob) => {
-								const audioUrl = URL.createObjectURL(newBlob);
-								console.log(audioUrl);
-								const audio = new Audio(audioUrl);
-								audio.play();
-							});
-						}
-					}
-				});
-				
-				//this.posSubscription = this._GeoLocation.positions$.subscribe({
-				//	next : (data : GeoPos) => {
-				//		console.log("Data1: ", data);
-				//	}
-				//});
-				
-			})
-			.catch( (e) => {console.error(e);} );
-			
-		} );*/
+		});
 	}
+	
+	isItVisible : boolean = true;
 	
 	quoting(quote : Message){
 		this.Quote = quote;
@@ -546,6 +555,20 @@ export class AppComponent {
 			}
 		}
 		
+		if(message.photo){
+			mes.photo = {filter : message.photo.filter};
+			if(message.photo.url){
+				mes.photo.url = message.photo.url;
+			}else if(Array.isArray(message.photo.blob)){
+				this._Compresor.decompress(message.photo.blob)
+				.then( (newBlob) => {
+					mes.photo.url = this.sanitize(URL.createObjectURL(newBlob));
+				});
+			}else if(message.photo.blob instanceof Blob){
+				mes.photo.url = this.sanitize(URL.createObjectURL(message.photo.blob));
+			}
+		}
+		
 		if(mes.byMe){
 			mes.sender = {...this.User, id: this._myID};
 		}else{
@@ -564,10 +587,11 @@ export class AppComponent {
 	};
 	
 	sendMessage(){
-		if(!this._Websocket.online || 
+		if( !this._Websocket.online || 
 			( 
 				(!this.messagePayload.message || this.messagePayload.message.length == 0) &&
-				!this.messagePayload.media
+				!this.messagePayload.media &&
+				!this.PhotoPreview
 			)
 		) return;
 		this.messagePayload.id = nanoid();
@@ -578,14 +602,35 @@ export class AppComponent {
 		const ev : MessageEvent = {event: "message", payload: this.messagePayload};
 		
 		ev.payload.date = Date.now();
+		
+		if(this.PhotoPreview){
+			ev.payload.photo = this.PhotoPreview;
+			this.PhotoPreview = null;
+		}
+		
 		this._addMessage(ev.payload, this._myID);
-		if(ev.payload.media){
-			this._Compresor.compress(ev.payload.media)
-			.then( (compressedText) => {
-				ev.payload.media = compressedText;
-				console.log("I AM GOING TO SEND", ev);
+		if(ev.payload.media || ev.payload.photo){
+			
+			const promises = [];
+			
+			if(ev.payload.media)
+				promises.push(this._Compresor.compress(ev.payload.media));
+			
+			if(ev.payload.photo)
+				promises.push(this._Compresor.compress(ev.payload.photo.blob));
+			
+			Promise.all(promises)
+			.then((results) => {
+				
+				if(ev.payload.media)
+					ev.payload.media = results.shift();
+				
+				if(ev.payload.photo)
+					ev.payload.photo.blob = results.shift();
+				
 				this._Websocket.sendMessage(ev);
-			});
+			})
+			.catch(console.error);
 		}else{
 			this._Websocket.sendMessage(ev);
 		}
@@ -619,8 +664,174 @@ export class AppComponent {
 		});
 	}
 	
+	private _dialDialogRef;
 	sendCall(user : Presentation){
-		console.log("call");
+		if(this._dialDialogRef != null) return;
+		this.inCallWith = user;
+		
+		
+		this._Websocket.sendMessage({
+			event : "incall",
+			payload : {
+				incall : true
+			}
+		});
+		this._Websocket.sendMessage({
+			event : "callrequest",
+			payload : {
+				to : this.inCallWith.id
+			}
+		});
+		this._dialDialogRef = this._Dialog.open(DialDialog, {
+			data: {user: this.inCallWith, isCallee: false},
+			disableClose: true
+		});
+		
+		this._dialDialogRef.afterClosed()
+		.subscribe( (res : boolean) => {
+			this._dialDialogRef = null;
+			if(res === false){
+				this._Websocket.sendMessage({
+					event : "requestcancelled",
+					payload : {
+						to : this.inCallWith.id
+					}
+				});
+				this._Websocket.sendMessage({
+					event : "incall",
+					payload : {
+						incall : false
+					}
+				});
+				this.inCallWith = null;
+			}
+		});
+	}
+	
+	private _closeCallRequestDialog(reason : string){
+		if(this._dialDialogRef == null) return;
+		
+		this._Websocket.sendMessage({
+			event : "incall",
+			payload : {
+				incall : false
+			}
+		});
+		
+		if(reason)
+			this.Notification.sendNotification(`callcanceled_${this.inCallWith.id}`, {
+				title : this.Lang.lang.NotificationTitles.peerHasRejectedCallRequest,
+				body : sprintf(reason, this.inCallWith.name),
+				icon : `${this._Config.URL}assets/avatars/${this.inCallWith.picture}.svg`,
+				isToast : true,
+				isNotification : true
+			});
+			
+		this._dialDialogRef.close();
+	}
+	
+	PhotoPreview : Photo;
+	private _photoBootRef;
+	openPhotoBoot(){
+		if(this._photoBootRef != null) return;
+		
+		
+		this._photoBootRef = this._Dialog.open(PhotoBoot, {
+			disableClose: true
+		});
+		
+		this._photoBootRef.afterClosed()
+		.subscribe( (photo) => {
+			if(!photo) return;
+			this._photoBootRef = null;
+			this.PhotoPreview = photo;
+			this.PhotoPreview.url = this.sanitize(URL.createObjectURL(photo.blob));
+		});
+	}
+	
+	private _pickupDialogRef;
+	private _openPickUpDialog(user : Presentation){
+		if(this._pickupDialogRef != null) return;
+		this.inCallWith = user;
+		
+		this._Websocket.sendMessage({
+			event : "incall",
+			payload : {
+				incall : true
+			}
+		});
+		this._pickupDialogRef = this._Dialog.open(DialDialog, {
+			data: {user: this.inCallWith, isCallee: true},
+			disableClose: true
+		});
+		
+		this._pickupDialogRef.afterClosed()
+		.subscribe( (res : boolean) => {
+			
+			this._pickupDialogRef = null;
+			
+			if(res === true){
+				this._Websocket.sendMessage({
+					event : "callaccepted",
+					payload : {
+						to : this.inCallWith.id
+					}
+				});
+				this._openCallDialog();
+				this.Media.startVideoFeed$().subscribe({
+					next : (stream) => {
+						this._RTC.addLocalStream(stream);
+					},
+					error : (e) => {
+						this._Websocket.sendMessage({
+							event : "hangup",
+							payload : {
+								to : this.inCallWith.id,
+								reason : "technicalProblems"
+							}
+						});
+						this._closeCallDialog();
+					}
+				});
+			}else if(res === false){				
+				this._Websocket.sendMessage({
+					event : "incall",
+					payload : {
+						incall : false
+					}
+				});
+				this._Websocket.sendMessage({
+					event : "callrejected",
+					payload : {
+						to : this.inCallWith.id
+					}
+				});
+				this.inCallWith = null;
+			}else{
+				this._Websocket.sendMessage({
+					event : "incall",
+					payload : {
+						incall : false
+					}
+				});
+				this.inCallWith = null;
+			}
+		});
+	}
+	
+	private _closePickUpDialog(reason : string){
+		if(this._pickupDialogRef == null) return;
+		
+		if(reason)
+			this.Notification.sendNotification(`callcanceled_${this.inCallWith.id}`, {
+				title : this.Lang.lang.NotificationTitles.peerHasRejectedCallRequest,
+				body : sprintf(reason, this.inCallWith.name),
+				icon : `${this._Config.URL}assets/avatars/${this.inCallWith.picture}.svg`,
+				isToast : true,
+				isNotification : true
+			});
+			
+		this._pickupDialogRef.close();
 	}
 	
 	sendNudge(user : Presentation){
@@ -640,17 +851,26 @@ export class AppComponent {
 	private _beginConnection(){
 		if(this._Websocket.online) return;
 		setTimeout(() => this._openConnectingDialog());
-		this._Identity.FauxFingerprint()
+		
+		const idPromise = isDevMode() ? this._Identity.FauxFingerprint : this._Identity.Fingerprint;
+		
+		idPromise()
 		.then( (fingerprint : string) => {
 			
 			this._GeoLocation.getPosition()
 			.then( (position : GeoPos) => {
+				
+				const routeParams = this._activeRoute.snapshot.queryParams;
 				
 				const con : ConnectionPayload = {
 					lat: position.lat,
 					lon: position.lon,
 					pcid: fingerprint
 				};
+				
+				if(routeParams.channel)
+					con.channel = routeParams.channel;
+				
 				this._Websocket.connect$(con).subscribe(this._socketOnlineSubscriber);
 			});
 		});
@@ -666,6 +886,7 @@ export class AppComponent {
 
 	private _audioSub;
 	audioBlobURL;
+	
 	private _audioRecSubscription = {
 		next : (audio) => {
 			this.audioBlobURL = this.sanitize(URL.createObjectURL(audio));
@@ -695,10 +916,57 @@ export class AppComponent {
 		else this.startRecording();
 	}
 	
+	private _sendIsTyping(isit : boolean){
+		const ev = {event: "istyping", payload: {istyping: isit}};
+		this._Websocket.sendMessage(ev);
+	}
+	private _typingTimeout;
+	
 	onKeydown(e){
-		if(e.keyCode == 13){
+		if(e.keyCode != 13){
+			if(this._typingTimeout){
+				clearTimeout(this._typingTimeout);
+			}else
+				this._sendIsTyping(true);
+			
+			this._typingTimeout = setTimeout(() => {
+				this._sendIsTyping(false);
+				this._typingTimeout = null;
+			}, 5000);
+		}else{
+			if(this._typingTimeout != null)
+				clearTimeout(this._typingTimeout);
+			this._typingTimeout = null;
+			this._sendIsTyping(false);
 			this.sendMessage();
 			e.preventDefault();
 		}
+	}
+
+	share() : void {
+		const textArea = document.createElement("textarea");
+		textArea.style.position = 'fixed';
+		textArea.style.top = "0px";
+		textArea.style.left = "0px";
+		textArea.style.width = '2em';
+		textArea.style.height = '2em';
+		textArea.style.padding = "0px";
+		textArea.style.border = 'none';
+		textArea.style.outline = 'none';
+		textArea.style.boxShadow = 'none';
+		textArea.style.background = 'transparent';
+		textArea.value = `${this._Config.URL}?channel=${this.Channel.id}`;
+		document.body.appendChild(textArea);
+		textArea.focus();
+		textArea.select();
+		try {
+			document.execCommand('copy');
+			this.Notification.sendNotification(`copied`, {
+				body : this.Lang.lang.NotificationBodies.copied,
+				isToast : true
+			});
+		} catch (err) {}
+		
+		document.body.removeChild(textArea);
 	}
 }

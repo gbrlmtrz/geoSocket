@@ -1,0 +1,22 @@
+<div class="callContainer">
+	<div class="presentation">
+		<mat-form-field>
+			<mat-select [placeholder]="Lang.lang.photoBoot.filter" name="filter" [(ngModel)]="photo.filter">
+				<mat-option *ngFor="let filter of filters" [value]="filter.class">
+					{{filter.name}}
+				</mat-option>
+			</mat-select>
+		</mat-form-field>
+	</div>
+	<button class="close" mat-icon-button (click)="close()">
+		<mat-icon>clear</mat-icon>
+	</button>
+	<div class="theirFeed">
+		<video #feedElement *ngIf="feed != null" [class]="photo.filter" [srcObject]="feed" autoplay="1"></video>
+	</div>
+	<div class="controls">
+		<button mat-fab *ngIf="Media.inUse" (click)="Media.takePhoto()">
+			<mat-icon class="hangup" color="primary">camera</mat-icon>
+		</button>
+	</div>
+</div>

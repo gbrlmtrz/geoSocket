@@ -1,6 +1,7 @@
 "use strict";
 let wss;
 let pingInterval;
+const Lang = require('../langs/server/es.json');
 const pako = require('pako');
 const str2ab = require('string-to-arraybuffer');
 const ab2str = require('arraybuffer-to-string');
@@ -53,7 +54,7 @@ const eventSchemaValidator = ajv.compile({
 
 const noop = function(){};
 
-const eventNooper = function(socketState, channelState, event, cb){ cb(true, null, null, event); };
+const eventNooper = function(socketState, channelState, event, cb){ cb(true, null, null, event, event); };
 
 const serializeAndCompress = function(obj){
 	let arrBuff = BSON.serialize(obj);
@@ -132,7 +133,7 @@ const getChannelCommitFunction = function(channel){
 			}
 				
 				
-			ChannelsEntity.updateOne({}, channelState, channelState)
+			ChannelsEntity.updateOne(Lang, channelState, channelState)
 			.then(r => {
 				clearTimeout(hardUpdates.get(channel));
 				hardUpdates.delete(channel);
@@ -164,12 +165,23 @@ const getChannelUpdateFunction = function(key){
 				clearTimeout(hardUpdates.get(key));
 				hardUpdates.delete(key);
 			}
-			ChannelsEntity.deleteOne({}, key)
+			
+			/*ChannelsEntity.deleteOne(Lang, key)
 			.then(() => {
 			})
 			.catch((e) => {
 				console.error("ChannelsEntity.deleteOne", e);
+			});*/
+			
+			
+			obj.disabled = true;
+			ChannelsEntity.updateOne(Lang, obj, obj)
+			.then(() => {
+			})
+			.catch((e) => {
+				console.error("ChannelsEntity.updateOne", e);
 			});
+			
 		}else{
 			channelStates.set(key, obj);
 			pub.set(`channel_${key}`, JSON.stringify(obj), (err) => {
@@ -544,7 +556,7 @@ const onMessage = function(message){
 				}
 				channel = JSON.parse(channel);
 				
-				const onEventCB = (success, newSocketState, newChannelState, payload) => {
+				const onEventCB = (success, newSocketState, newChannelState, payload, echoPayload) => {
 					if(!success) return;
 					
 					if(newSocketState != null)
@@ -560,7 +572,7 @@ const onMessage = function(message){
 						publish(this.state.channel, payload);
 					
 					if(event.echo)
-						this.send(serializeAndCompress(payload));
+						this.send(serializeAndCompress(echoPayload || payload));
 				};
 				
 				event.onEvent(objectCopy(this.state), objectCopy(channel.state), message, onEventCB);
@@ -747,7 +759,7 @@ const createChannel = function(query, filledChannels, cb){
 			});
 		};
 		
-		ChannelsEntity.insertOne({}, Channel)
+		ChannelsEntity.insertOne(Lang, Channel)
 		.then(ChannelEntityCB)
 		.catch( e => console.error("ChannelsEntity.insertOne", e));		
 	};

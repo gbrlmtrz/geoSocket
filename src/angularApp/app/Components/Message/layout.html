@@ -13,6 +13,10 @@
 				reply
 			</mat-icon>
 		</div>
+		<div class="photo" *ngIf="Message.photo && Message.photo.url">
+			<div class="photobg" [class]="Message.photo.filter"></div>
+			<img alt="photo" [class]="Message.photo.filter" [src]="Message.photo.url"/>
+		</div>
 		<div class="audio" *ngIf="Message.media">
 			<audio #audio [src]="Message.media" ></audio>
 			<button mat-icon-button (click)="audio.paused ? audio.play() : audio.pause()" [style.color]="'#'+Message.sender.color">

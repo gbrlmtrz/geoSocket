@@ -1,0 +1,23 @@
+<h1 mat-dialog-title class="text-center">{{isCallee ? Lang.lang.DialDialog.calleeTitle : Lang.lang.DialDialog.callerTitle }}</h1>
+<div mat-dialog-content>
+	<div class="container">
+		<div class="imgContainer">
+			<div class="imgBackground" [style.background-color]="'#'+User.color"></div>
+			<img class="img" [src]="'/assets/avatars/'+User.picture+'.svg'" alt="avatar"/>
+		</div>
+		<span class="title text-center" [title]="User.name">{{User.name}}</span>
+		<div class="dial">
+			<span class="one"></span>
+			<span class="two"></span>
+			<span class="three"></span>
+		</div>
+	</div>
+</div>
+<div class="buttons text-center">
+	<button type="button" mat-fab (click)="onCancel()">
+		<mat-icon class="hangup">call_end</mat-icon>
+	</button>
+	<button *ngIf="isCallee" type="button" mat-fab (click)="onAccept()" cdkFocusInitial>
+		<mat-icon class="pickup">call</mat-icon>
+	</button>
+</div>

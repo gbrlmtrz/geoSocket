@@ -13,7 +13,7 @@
 }
 
 @keyframes nudge {
-	from {
+	from { 
 		background-position: 5px 0;
 	}
 	to {
@@ -27,7 +27,7 @@
 }
 
 .sidenavContainer.nudge{
-	animation: nudge .1s linear infinite;
+	animation: nudge .1s linear alternate infinite;
 }
 
 .isPortrait .mToolbar {
@@ -37,6 +37,8 @@
 
 h1.title {
 	margin-left: 8px;
+    text-overflow: ellipsis;
+    overflow: hidden;
 }
 
 .sidenavContainer {
@@ -80,7 +82,6 @@ h1.title {
 	margin-top: 56px;
 }
 
-
 #keyboard{
 	display: -webkit-flex;
     display: flex;
@@ -109,14 +110,50 @@ audio{
 	border-radius: 30px;
 }
 
-#quote{
+#imgPreview, #quote{
 	display: flex;
-	max-height: 90px;
+	max-height: 130px;
 	margin: 0 5px 5px 5px;
 	height: auto;
     align-items: center;
 	padding-top: 4px;
 	transition: height ease-in-out .5s;
+}
+
+#imgPreview{
+	max-height: 170px;
+}
+
+@media (orientation: portrait) {
+	#previewCont{
+		/*max-width: 170px;*/
+	}
+	
+	#previewCont > img{
+		object-fit: cover;
+		max-height: 100%;
+		max-width: 170px;
+	}
+}
+
+@media (orientation: landscape) {
+	#previewCont{
+		max-height: 170px;
+	}
+	
+	#previewCont > img{
+		object-fit: cover;
+		max-height: 170px;
+		max-width: 100%;
+	}
+}
+
+
+#previewCont{
+	flex: 1 1 0;
+    align-items: center;
+    display: flex;
+    justify-content: center;
 }
 
 #quote quote{
