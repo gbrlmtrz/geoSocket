@@ -30,7 +30,8 @@
 		- [ ] Run it in a WebWorker?
 	- [x] Get browser fingerprint
 - High
-	- [ ] Mobile Friendly
+	- [X] Mobile Friendly
+	- [X] RTC communication
 	- [X] Binary compression
 	- [X] Voice notes
 	- [X] Photos
