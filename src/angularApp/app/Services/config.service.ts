@@ -18,7 +18,7 @@ export class ConfigService{
 	}
 	
 	get WS(){
-		return isDevMode() ? "wss://localhost:8082/socket?" : "https://sixdegreesnear.com/socket?";
+		return isDevMode() ? "wss://localhost:8082/socket?" : "wss://sixdegreesnear.com/socket?";
 	}
 	
 }

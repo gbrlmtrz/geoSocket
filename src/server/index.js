@@ -1,10 +1,12 @@
 'use strict';
 //const fs = require('fs');
+const { join } = require('path');
+const DIST_FOLDER = join(__dirname, '..', '..', 'dist');
+const { existsSync, createReadStream, readFileSync, readdirSync, access } = require('fs');
 const fastify = require('fastify');
 const path = require('path');
 const schemas = require('../logic/schemas');
 const entities = require('../logic/Entities');
-const {existsSync, readdirSync, readFileSync} = require('fs');
 const routeTransformer = require('./utils/routeTransformer');
 const authMaker = require('./utils/authMaker');
 const autoauth = require('./preHandlers/autoauth');
@@ -19,11 +21,13 @@ const app = fastify({
 	}
 });
 
-//app.register(require('fastify-ws'));
-//app.register(require('fastify-sse'));
-app.register(require('fastify-favicon'), {path : __dirname});
-app.register(require('fastify-cors'), { origin: '*', optionsSuccessStatus: 200 });
-//app.register(require('fastify-compress
+app.register(require('fastify-static'), {root: join(DIST_FOLDER, 'geoSocketClient'), prefix: '/static/'});
+
+app.register(require('fastify-compress'), {threshold: 2048});
+app.register(require('fastify-favicon'), {path : join(DIST_FOLDER, 'geoSocketClient')});
+
+/*app.register(require('fastify-favicon'), {path : __dirname});
+app.register(require('fastify-cors'), { origin: '*', optionsSuccessStatus: 200 });*/
 
 app.decorateRequest('lang', {});
 app.addHook('preHandler', require('./preHandlers/locale'));
@@ -88,6 +92,27 @@ for(let key in schemas){
 		}, {prefix: `/${key}`});
 	}	
 }
+
+app.get('/robots.txt', (req, reply) => {
+	reply.sendFile('Robots.txt');
+});
+app.get('/Robots.txt', (req, reply) => {
+	reply.sendFile('Robots.txt');
+});
+
+app.get('/*', (req, reply) => {
+	if(req.params['*'].length > 2)
+		access(join(DIST_FOLDER, 'geoSocketClient', req.params['*']), (err) => {
+			if(err){ 
+				reply.sendFile('index.html');
+			}
+			else{
+				reply.sendFile(req.params['*']);
+			}
+		});
+	else
+		reply.sendFile('index.html');
+});
 
 module.exports = {
 	start(){

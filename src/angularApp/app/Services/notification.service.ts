@@ -34,11 +34,18 @@ export class NotificationService {
 		(<any> localStorage).setItem("notification.enabled", value);
 	}
 	
+	set isGranted(val : boolean){
+		
+	}
+	
 	get isGranted(){
 		return ("Notification" in window) && Notification.permission == "granted";
 	}
 	
 	sendNotification(tag : string, notification : any) : void{
+		if(!this.hasAskedBefore){
+			this.requestPermission();
+		}
 		const obj = {...this._preLoaded, ...notification, tag};
 		this._queue.set(tag, obj);
 		this.startWork();

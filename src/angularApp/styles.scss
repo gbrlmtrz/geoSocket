@@ -11,45 +11,69 @@
 @import '~@angular/material/theming';
 @include mat-core();
 $primary: mat-palette($mat-pink, 800);
-$accent:  mat-palette($mat-blue-grey, 400);
-$warn:    mat-palette($mat-deep-orange, 600);
+$accent:	mat-palette($mat-blue-grey, 400);
+$warn:		mat-palette($mat-deep-orange, 600);
 $theme: mat-dark-theme($primary, $accent, $warn);
 @include angular-material-theme($theme);
 
+@font-face {
+	font-family: 'Material Icons';
+	font-style: normal;
+	font-weight: 400;
+	src: url('/assets/font/MaterialIcons-Regular.woff2') format('woff2');
+}
 
+.material-icons {
+	font-family: 'Material Icons';
+	font-weight: normal;
+	font-style: normal;
+	font-size: 24px;
+	line-height: 1;
+	letter-spacing: normal;
+	text-transform: none;
+	display: inline-block;
+	white-space: nowrap;
+	word-wrap: normal;
+	direction: ltr;
+	-webkit-font-feature-settings: 'liga';
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+	font-feature-settings: 'liga';
+}
 
 .d-portrait-none{
-	@media  (orientation: portrait) {
+	@media	(orientation: portrait) {
 		display: none !important;
 	}
 }
 
 .d-portrait-block{
-	@media  (orientation: portrait) {
+	@media	(orientation: portrait) {
 		display: block !important;
 	}
 }
 
 .d-portrait-flex{
-	@media  (orientation: portrait) {
+	@media	(orientation: portrait) {
 		display: flex !important;
 	}
 }
 
 .d-landscape-none{
-	@media  (orientation: landscape) {
+	@media	(orientation: landscape) {
 		display: none !important;
 	}
 }
 
 .d-landscape-block{
-	@media  (orientation: landscape) {
+	@media	(orientation: landscape) {
 		display: block !important;
 	}
 }
 
 .d-landscape-flex{
-	@media  (orientation: landscape) {
+	@media	(orientation: landscape) {
 		display: flex !important;
 	}
 }

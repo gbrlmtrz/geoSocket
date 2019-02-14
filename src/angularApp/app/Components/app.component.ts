@@ -507,8 +507,6 @@ export class AppComponent {
 		
 		if(this.Notification.isGranted && this.Notification.enabled){
 			this.Notification.startWork();
-		}else if(!this.Notification.hasAskedBefore){
-			this.Notification.requestPermission();
 		}
 		
 		this._Visibility.visibility$.subscribe({
