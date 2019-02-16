@@ -13,12 +13,12 @@ const autoauth = require('./preHandlers/autoauth');
 
 const app = fastify({
 	//logger: true,
-	http2: true,
+	/*http2: true,
 	https: {
 		allowHTTP1: true, 
 		key: readFileSync(path.join(__dirname, '..', '..', 'ssl', 'server.key')),
 		cert: readFileSync(path.join(__dirname, '..', '..', 'ssl', 'server.crt'))
-	}
+	}*/
 });
 
 app.register(require('fastify-static'), {root: join(DIST_FOLDER, 'geoSocketClient'), prefix: '/static/'});
