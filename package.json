@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "start:app": "ng serve --port 8080 --host 0.0.0.0 --ssl true --ssl-cert \"ssl/server.crt\" --ssl-key \"ssl/server.key\"",
-    "startProd": "set NODE_ENV=production&& node index.js",
+    "startProd": "set NODE_ENV=production && node index.js",
     "build:compresor": "webpack --config src/angularApp/compresor/webpack.config.js",
     "build:socketClient": "webpack --config src/angularApp/socketClient/webpack.config.js",
     "build:audioRecorder": "webpack --config src/angularApp/audioRecorder/webpack.config.js",
