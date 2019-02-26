@@ -122,8 +122,8 @@ redirect.route({
 	method: ['DELETE', 'GET', 'HEAD', 'PATCH', 'POST', 'PUT', 'OPTIONS'],
 	handler: (req, res) => {
         const { host } = req.headers;
-        res.writeHead(301, { Location: "https://" + host + req.url });
-        res.end();
+		res.redirect(301, `https://${host}${req.raw.url}`);
+		return;
 	}
 });
 
