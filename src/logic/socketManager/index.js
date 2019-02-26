@@ -386,6 +386,9 @@ const publishToOne = function(toClient, payload){
 };
 
 const getIPFromConnection = function(req){
+	
+	console.log("IP", req.headers, req.connection.remoteAddress, req.socket.remoteAddress);
+	
 	if(req.headers.hasOwnProperty("x-forwarded-for"))
 		return req.headers["x-forwarded-for"].split("").pop();
 	
