@@ -10,7 +10,7 @@
     "build:compresor": "webpack --config src/angularApp/compresor/webpack.config.js",
     "build:socketClient": "webpack --config src/angularApp/socketClient/webpack.config.js",
     "build:audioRecorder": "webpack --config src/angularApp/audioRecorder/webpack.config.js",
-    "build:app": "ng build --base-href https://sixdegreesnear.com/ --aot true --prod --extract-css true --named-chunks false --buildOptimizer && node build/fix-sw --base-href https://sixdegreesnear.com/",
+    "build:app": "ng build --base-href https://app.sixdegreesnear.com/ --aot true --prod --extract-css true --named-chunks false --buildOptimizer && node build/fix-sw --base-href https://app.sixdegreesnear.com/",
     "test": "ng test",
     "ng": "ng",
     "lint": "ng lint",

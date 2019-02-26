@@ -10,15 +10,15 @@ export class ConfigService{
 	constructor(@Inject(PLATFORM_ID) private platformId: Object) { }
 
 	get URL(){
-		return isDevMode() ? "https://localhost:8080/" : "https://sixdegreesnear.com/";
+		return isDevMode() ? "https://localhost:8080/" : "https://app.sixdegreesnear.com/";
 	}
 	
 	get API(){
-		return isDevMode() ? "https://localhost:8082/" : "https://sixdegreesnear.com/api/";
+		return isDevMode() ? "https://localhost:8082/" : "https://app.sixdegreesnear.com/api/";
 	}
 	
 	get WS(){
-		return isDevMode() ? "wss://localhost:8082/socket?" : "wss://sixdegreesnear.com/socket?";
+		return isDevMode() ? "wss://localhost:8082/socket?" : "wss://app.sixdegreesnear.com/socket?";
 	}
 	
 }

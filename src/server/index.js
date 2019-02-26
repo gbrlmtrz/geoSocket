@@ -114,6 +114,19 @@ app.get('/*', (req, reply) => {
 		reply.sendFile('index.html');
 });
 
+
+const redirect = fastify({});
+
+redirect.route({
+	url: '/*',
+	method: ['DELETE', 'GET', 'HEAD', 'PATCH', 'POST', 'PUT', 'OPTIONS'],
+	handler: (req, res) => {
+        const { host } = req.headers;
+        res.writeHead(301, { Location: "https://" + host + req.url });
+        res.end();
+	}
+});
+
 module.exports = {
 	start(){
 		app.listen(8082, '0.0.0.0', (err, addr) => {
@@ -122,6 +135,14 @@ module.exports = {
 			}
 			
 			console.log(`Server listening on ${addr} on proccess ${process.pid}`)
+		});
+		
+		redirect.listen(8080, '0.0.0.', (err, addr) => {
+			if(err){
+				console.error(err)
+			}
+			
+			console.log(`Redirector listening on ${addr} on proccess ${process.pid}`)
 		});
 	}
 };
