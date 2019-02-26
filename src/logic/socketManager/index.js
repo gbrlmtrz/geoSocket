@@ -193,6 +193,19 @@ const getChannelUpdateFunction = function(key){
 	};
 };
 
+const addToUpdateQueue = function(key, objMessage){	
+	if(!channelStates.has(key)) return;
+	
+	if(!channelPatches.has(key)){
+		channelPatches.set(key, {
+			updates: [objMessage],
+			timeout: setTimeout( getChannelUpdateFunction(key), 1000 / config.get("channelSettings.updatesPerSecond"))
+		});
+	}else{
+		channelPatches.get(key).updates.push(objMessage);
+	}
+};
+
 const onPMessage = function(chnl, message){
 	const {channel, key} = getChannelKey(possiblePatterns, chnl);
 	
@@ -204,17 +217,8 @@ const onPMessage = function(chnl, message){
 			if(!objMessage.valid) return;
 			
 			objMessage = objMessage.item;
-		
-			if(!channelStates.has(key)) return; 
 			
-			if(!channelPatches.has(key)){
-				channelPatches.set(key, {
-					updates: [objMessage],
-					timeout: setTimeout( getChannelUpdateFunction(key), 1000 / config.get("channelSettings.updatesPerSecond"))
-				});
-			}else{
-				channelPatches.get(key).updates.push(objMessage);
-			}
+			addToUpdateQueue(key, objMessage);
 			break;
 		case possiblePatterns[1]:
 			objMessage = tryJSONParse(message);
@@ -674,107 +678,109 @@ const getRandom = function(list){
 };
 
 const createChannel = function(query, filledChannels, cb){
-	
-	const findPlaceNearbyCB = function(placesNearby){
-		
-		console.log("placeNearbyCB");
-		
-		let goodPlace = null;
-		if(placesNearby.length > 0){
-			if(placesNearby[0].distance < config.get("channelSettings.radius"))
-				goodPlace = placesNearby[0];
-		}
-		const cid = query.channel || nanoid();
-		const Channel = {
-			_id: cid,
-			type: "Feature",
-			collection: "channels",
-			created: Date.now(),
-			state: {
-				id : cid,
-				connectedClients: 0,
-				ips: [],
-				clients: [],
-				geometry: {
-					type: "MultiPoint",
-					coordinates: []
-				}
+	const cid = query.channel || nanoid();
+	const Channel = {
+		_id: cid,
+		type: "Feature",
+		collection: "channels",
+		created: Date.now(),
+		state: {
+			id : cid,
+			connectedClients: 0,
+			ips: [],
+			clients: [],
+			geometry: {
+				type: "MultiPoint",
+				coordinates: []
 			}
-		};
+		}
+	};
+
+	for(const event of Events.values())
+		if(event.hasOwnProperty("onCreate") && event.onCreate != undefined)
+			event.onCreate(Channel);
+			
+	const ChannelEntityCB = function(response){
+		if(!response.success){
+			cb(false);
+			return;
+		}
 		
-		for(const event of Events.values())
-			if(event.hasOwnProperty("onCreate") && event.onCreate != undefined)
-				event.onCreate(Channel);
-		
-		if(goodPlace){
-			Channel.state.channelName = goodPlace.name;
-			Channel.state.geometry.coordinates.push(goodPlace.geometry.coordinates);
-		}	
-		
-		const ChannelEntityCB = function(response){
-			if(!response.success){
+		pub.set(`channel_${Channel._id}`, JSON.stringify(Channel), (err) => {
+			if(err){
+				console.error("insert err", err);
 				cb(false);
 				return;
 			}
 			
-			pub.set(`channel_${Channel._id}`, JSON.stringify(Channel), (err) => {
-				if(err){
-					console.error("insert err", err);
-					cb(false);
-					return;
+			sub.subscribe(`updates_${Channel._id}`, (err, count) => { if(err) console.error(err); });
+			pub.set(`updater_${Channel._id}`, ServerName);
+			
+			channelStates.set(Channel._id, Channel);
+			query.channel = Channel._id;
+			
+			cb(true);
+			
+			
+			const findPlaceNearbyCB = function(placesNearby){
+				
+				let goodPlace = null;
+				if(placesNearby.length > 0){
+					if(placesNearby[0].distance < config.get("channelSettings.radius"))
+						goodPlace = placesNearby[0];
 				}
 				
-				sub.subscribe(`updates_${Channel._id}`, (err, count) => { if(err) console.error(err); });
-				pub.set(`updater_${Channel._id}`, ServerName);
+				if(goodPlace){
+										
+					const newState = {
+						channelName: { $set : goodPlace.name },
+						geometry : { coordinates : { $push: [goodPlace.geometry.coordinates] } }
+					};
+					
+					addToUpdateQueue(Channel._id, newState);
+				}			
+			};
+			
+			findPlaceNearby(query.lat, query.lon, config.get("channelSettings.radius"))
+			.then( findPlaceNearbyCB )
+			.catch( e => console.error("findPlaceNearby", e));
 				
-				channelStates.set(Channel._id, Channel);
-				query.channel = Channel._id;
 				
-				
-				console.log("channel created", Channel);
-				
-				cb(true);
-				
-				if(filledChannels.size > 0){
-					if(filledChannels.size > (config.get("channelSettings.wantedClients")-1)){
-						const values = filledChannels.values();
-						for(let i = 0; i < (config.get("channelSettings.wantedClients")-1); i++){
-							const {_id, state} = values.next().value;
-							const client = getRandom(state.clients);
-							publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel._id, clients: [client._id]}});
+			if(filledChannels.size > 0){
+				if(filledChannels.size > (config.get("channelSettings.wantedClients")-1)){
+					const values = filledChannels.values();
+					for(let i = 0; i < (config.get("channelSettings.wantedClients")-1); i++){
+						const {_id, state} = values.next().value;
+						const client = getRandom(state.clients);
+						publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel._id, clients: [client._id]}});
+					}
+				}else{
+					const it = filledChannels.values();
+					let chn = it.next();
+					let needed = config.get("channelSettings.wantedClients")-1
+					while(!chn.done && needed > 0){
+						const {_id, state} = chn.value;
+						const available = Math.abs(state.connectedClients - needed);
+						const clientsToSwitch = [];
+						for(let i = 0; i < available; i++){
+							let client;
+							do{
+								client = getRandom(state.clients);
+							}while(clientsToSwitch.indexOf(client) >= 0);
+							clientsToSwitch.push(client);
 						}
-					}else{
-						const it = filledChannels.values();
-						let chn = it.next();
-						let needed = config.get("channelSettings.wantedClients")-1
-						while(!chn.done && needed > 0){
-							const {_id, state} = chn.value;
-							const available = Math.abs(state.connectedClients - needed);
-							const clientsToSwitch = [];
-							for(let i = 0; i < available; i++){
-								let client;
-								do{
-									client = getRandom(state.clients);
-								}while(clientsToSwitch.indexOf(client) >= 0);
-								clientsToSwitch.push(client);
-							}
-							needed = needed - clientsToSwitch.length;
-							publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel._id, clients: clientsToSwitch}});
-							chn = it.next();
-						}
+						needed = needed - clientsToSwitch.length;
+						publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel._id, clients: clientsToSwitch}});
+						chn = it.next();
 					}
 				}
-			});
-		};
-		
-		ChannelsEntity.insertOne(Lang, Channel)
-		.then(ChannelEntityCB)
-		.catch( e => console.error("ChannelsEntity.insertOne", e));		
+			}
+		});
 	};
-	
-	findPlaceNearby(query.lat, query.lon, config.get("channelSettings.radius"))
-	.then( findPlaceNearbyCB )
-	.catch( e => console.error("findPlaceNearby", e));
+
+	ChannelsEntity.insertOne(Lang, Channel)
+	.then(ChannelEntityCB)
+	.catch( e => console.error("ChannelsEntity.insertOne", e));
 };
 
 const loopChannels = function(query, goodCandidate, channels, filledChannels){
@@ -803,15 +809,18 @@ const findChannel = function(query, cb){
 	const filledChannels = new Map();
 	
 	const channelsByIPCB = function(channelsByIP){
-		console.log("channelsByIPCB", channelsByIP);
 		
 		if(channelsByIP.length > 0){
 			goodCandidate = loopChannels(query, goodCandidate, channelsByIP, filledChannels);
 			
-			console.log("channels By Ip", channelsByIP);
 			if(query.channel){
 				cb(true);
 				return;
+			}
+			
+			if(goodCandidate){
+				query.channel = goodCandidate._id;
+				cb(true);
 			}
 		}
 		
