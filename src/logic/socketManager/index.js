@@ -821,6 +821,7 @@ const findChannel = function(query, cb){
 			if(goodCandidate){
 				query.channel = goodCandidate._id;
 				cb(true);
+				return;
 			}
 		}
 		
