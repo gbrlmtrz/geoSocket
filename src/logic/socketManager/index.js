@@ -725,6 +725,10 @@ const createChannel = function(query, filledChannels, cb){
 				
 				channelStates.set(Channel._id, Channel);
 				query.channel = Channel._id;
+				
+				
+				console.log("channel created", Channel);
+				
 				cb(true);
 				
 				if(filledChannels.size > 0){
@@ -797,6 +801,8 @@ const findChannel = function(query, cb){
 	const channelsByIPCB = function(channelsByIP){
 		if(channelsByIP.length > 0){
 			goodCandidate = loopChannels(query, goodCandidate, channelsByIP, filledChannels);
+			
+			console.log("channels By Ip", channelsByIP);
 			if(query.channel){
 				cb(true);
 				return;
@@ -805,6 +811,7 @@ const findChannel = function(query, cb){
 		
 		const channelsByLatLonCB = function(channelsByLatLon){
 			if(channelsByLatLon.length > 0){
+			console.log("channels By LL", channelsByLatLon);
 				goodCandidate = loopChannels(query, goodCandidate, channelsByLatLon, filledChannels);
 				if(query.channel){
 					cb(true);
@@ -840,6 +847,7 @@ const clientVerifier = function(info, cb){
 		cb(false);
 	}else{
 		query.ip = getIPFromConnection(info.req);
+		console.log("inc client", query);
 		info.req["socketQuery"] = query;
 		if(query.channel){
 			pub.get(`channel_${query.channel}`, function(err, channel){
