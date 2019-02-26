@@ -678,6 +678,9 @@ const getRandom = function(list){
 const createChannel = function(query, filledChannels, cb){
 	
 	const findPlaceNearbyCB = function(placesNearby){
+		
+		console.log("placeNearbyCB");
+		
 		let goodPlace = null;
 		if(placesNearby.length > 0){
 			if(placesNearby[0].distance < config.get("channelSettings.radius"))
@@ -802,6 +805,7 @@ const findChannel = function(query, cb){
 	const filledChannels = new Map();
 	
 	const channelsByIPCB = function(channelsByIP){
+		console.log("channelsByIPCB");
 		if(channelsByIP.length > 0){
 			goodCandidate = loopChannels(query, goodCandidate, channelsByIP, filledChannels);
 			
@@ -813,8 +817,9 @@ const findChannel = function(query, cb){
 		}
 		
 		const channelsByLatLonCB = function(channelsByLatLon){
+			console.log("channelsByLatLonCB");
 			if(channelsByLatLon.length > 0){
-			console.log("channels By LL", channelsByLatLon);
+				console.log("channels By LL", channelsByLatLon);
 				goodCandidate = loopChannels(query, goodCandidate, channelsByLatLon, filledChannels);
 				if(query.channel){
 					cb(true);
