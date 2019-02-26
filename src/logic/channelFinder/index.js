@@ -71,7 +71,7 @@ const findChannelByDistance = function(lat, lon, radius){
 const findChannelByIP = function(lat, lon, ip){
 	return new Promise(function(resolve, reject){
 		
-				return resolve([]);
+		return resolve([]);
 		db.search('channel', 'ipchannel', {
 			q: `ip:${ip}`,
 			include_docs: true

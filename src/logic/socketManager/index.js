@@ -387,8 +387,6 @@ const publishToOne = function(toClient, payload){
 
 const getIPFromConnection = function(req){
 	
-	console.log("IP", req.headers, req.connection.remoteAddress, req.socket.remoteAddress);
-	
 	if(req.headers.hasOwnProperty("x-forwarded-for"))
 		return req.headers["x-forwarded-for"].split(",").pop();
 	
@@ -805,7 +803,7 @@ const findChannel = function(query, cb){
 	const filledChannels = new Map();
 	
 	const channelsByIPCB = function(channelsByIP){
-		console.log("channelsByIPCB");
+		console.log("channelsByIPCB"), channelsByIP;
 		if(channelsByIP.length > 0){
 			goodCandidate = loopChannels(query, goodCandidate, channelsByIP, filledChannels);
 			
