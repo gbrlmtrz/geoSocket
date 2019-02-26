@@ -56,13 +56,13 @@ export class AppComponent {
 		return !this.isLandscape;
 	}
 	
-	@HostListener('window:resize')
+	/*@HostListener('window:resize')
     onWindowResize() {
         if (this.resizeTimeout) {
             clearTimeout(this.resizeTimeout);
         }
         this.resizeTimeout = setTimeout(this._checkIfLandscape.bind(this), 500);
-    }
+    }*/
 	
 	myFeed: MediaStream;
 	theirFeed: MediaStream;

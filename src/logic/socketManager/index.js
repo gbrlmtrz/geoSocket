@@ -546,10 +546,6 @@ const onMessage = function(message){
 	
 	message.sender = this.state.id;
 	
-	//for(let key in message.payload){
-	//	console.log("key", key);
-	//}
-	
 	if(eventSchemaValidator(message) && Events.has(message.event)){
 		const event = Events.get(message.event);
 		if(event.validator(message)){
@@ -826,9 +822,7 @@ const findChannel = function(query, cb){
 		}
 		
 		const channelsByLatLonCB = function(channelsByLatLon){
-			console.log("channelsByLatLonCB");
 			if(channelsByLatLon.length > 0){
-				console.log("channels By LL", channelsByLatLon);
 				goodCandidate = loopChannels(query, goodCandidate, channelsByLatLon, filledChannels);
 				if(query.channel){
 					cb(true);
@@ -864,7 +858,7 @@ const clientVerifier = function(info, cb){
 		cb(false);
 	}else{
 		query.ip = getIPFromConnection(info.req);
-		console.log("inc client", query);
+		
 		info.req["socketQuery"] = query;
 		if(query.channel){
 			pub.get(`channel_${query.channel}`, function(err, channel){

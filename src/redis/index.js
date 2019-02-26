@@ -10,8 +10,6 @@ const object = {
 const eventCounts = {};
 const redisInstances = {};
 
-console.log(config);
-
 module.exports = {
 	getRedis: function(intention){
 		if(intention){
