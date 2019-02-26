@@ -803,7 +803,8 @@ const findChannel = function(query, cb){
 	const filledChannels = new Map();
 	
 	const channelsByIPCB = function(channelsByIP){
-		console.log("channelsByIPCB"), channelsByIP;
+		console.log("channelsByIPCB", channelsByIP);
+		
 		if(channelsByIP.length > 0){
 			goodCandidate = loopChannels(query, goodCandidate, channelsByIP, filledChannels);
 			
