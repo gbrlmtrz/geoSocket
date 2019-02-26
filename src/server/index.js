@@ -137,7 +137,7 @@ module.exports = {
 			console.log(`Server listening on ${addr} on proccess ${process.pid}`)
 		});
 		
-		redirect.listen(8080, '0.0.0.', (err, addr) => {
+		redirect.listen(8080, '0.0.0.0', (err, addr) => {
 			if(err){
 				console.error(err)
 			}
