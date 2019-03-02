@@ -302,7 +302,7 @@ export class AppComponent {
 					this.Users.set(data.payload.id, {id: data.payload.id, ...this._Anonymous});
 					break;
 				case "presentation":
-					if(this.Users.has(data.sender)){
+					/*if(this.Users.has(data.sender)){
 						this.Notification.sendNotification(`presentation_${data.sender}`, {
 							title : this.Lang.lang.NotificationTitles.nameChange,
 							body : sprintf(this.Lang.lang.NotificationBodies.nameChange, this.Users.get(data.sender).name, data.payload.name),
@@ -318,7 +318,7 @@ export class AppComponent {
 							isToast : true,
 							isNotification : true
 						});
-					}
+					}*/
 					
 					this.Users.set(data.sender, {id: data.sender, ...data.payload});
 					break;
@@ -909,7 +909,7 @@ export class AppComponent {
 	}
 	
 	toggleRecording() : void{
-		if(this.isPortrait) return;
+		//if(this.isPortrait) return;
 		if(this.Media.isRecordingAudio) this.stopRecording();
 		else this.startRecording();
 	}

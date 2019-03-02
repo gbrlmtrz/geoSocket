@@ -12,7 +12,7 @@
 		<video *ngIf="theirFeed != null" [class]="theirFilter" [srcObject]="theirFeed" autoplay="1"></video>
 	</div>
 	<div class="myFeed">
-		<video *ngIf="RTC.LocalStream != null" [class]="filter" [srcObject]="RTC.LocalStream" autoplay="1"></video>
+		<video *ngIf="RTC.LocalStream != null" [class]="filter" [srcObject]="RTC.LocalStream" muted autoplay="1"></video>
 	</div>
 	<div class="controls">
 		<mat-form-field *ngIf="theirFeed != null">
