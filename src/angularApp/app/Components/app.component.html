@@ -78,7 +78,8 @@
 						</button>
 					</form>
 				</div>
-				<button mat-fab (click)="toggleRecording()" <!--(press)="startRecording()" (pressup)="stopRecording()"--> color="accent">
+				<!--(press)="startRecording()" (pressup)="stopRecording()"-->
+				<button mat-fab (click)="toggleRecording()" color="accent">
 					<mat-icon *ngIf="!Media.isProcesingAudio && !Media.isRecordingAudio">mic</mat-icon>
 					<mat-icon *ngIf="!Media.isProcesingAudio && Media.isRecordingAudio" class="rec">stop</mat-icon>
 					<mat-progress-spinner *ngIf="Media.isProcesingAudio" diameter="20" class="centeredSpinner" mode="indeterminate"></mat-progress-spinner>
