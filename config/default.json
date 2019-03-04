@@ -12,7 +12,7 @@
 		"emitConnects": true,
 		"keepOneConnectionPerPC": true,
 		"emitDisconnects": true,
-		"radius": 50,
+		"radius": 5000,
 		"maxClients": 5,
 		"wantedClients": 3,
 		"clientsToDissolve": 1,
