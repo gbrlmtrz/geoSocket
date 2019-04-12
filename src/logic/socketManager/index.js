@@ -545,7 +545,8 @@ const onMessage = function(message){
 	}
 	
 	message.sender = this.state.id;
-	
+	message.date = Date.now();
+		
 	if(eventSchemaValidator(message) && Events.has(message.event)){
 		const event = Events.get(message.event);
 		if(event.validator(message)){

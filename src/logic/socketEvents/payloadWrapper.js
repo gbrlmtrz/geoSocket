@@ -11,6 +11,10 @@ module.exports = function(payload){
 			event: {
 				type: "string"
 			},
+			date: {
+				type: "integer",
+				maximum: 1555014442000
+			},
 			payload: {...payload}
 		}	
 	};
