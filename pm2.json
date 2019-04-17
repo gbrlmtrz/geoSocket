@@ -1,0 +1,16 @@
+{
+	"apps" : [
+		{
+			"name" : "geoSocket",
+			"interpreter": "none",
+			"instances": "max",
+			"script" : "./geosocket",
+			"env": {
+				"NODE_ENV": "production",
+			},
+			"env_production" : {
+				"NODE_ENV": "production"
+			}
+		}
+	]
+}
