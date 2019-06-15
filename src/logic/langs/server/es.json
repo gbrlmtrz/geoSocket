@@ -1,18 +1,5 @@
 {
-	"authWrongEmailOrPassword":"E-mail o contrasena incorrecta",
-	
-	"userEmailAlreadyRegistered":"E-mail ya registrado",
-	"userPasswordRequired":"Debes enviar una contrasena de al menos 8 caracteres",
-	"userEmailRequired":"Debes enviar el E-mail del usuario",
-	"userPrivRequired":"Debes enviar el privilegio del usuario",
-	
-	"tokenNotFound":"Token no encontrado",
-	"translatorNoCredits":"No tienes creditos restantes",
-	"translatorExpired":"Tus creditos han expirado",
-	"translatorError":"Error al traducir",
-	"watsonSessionIdError":"Error al traducir",
-	
-	
+	"authWrongEmailOrPassword":"E-mail o contrasena incorrecta",	
 	"invalidID":"ID invalido",
 	"searchError":"Error al ejecutar busqueda",
 	"emptyBodyError":"Haz enviado un cuerpo vacio",
@@ -24,5 +11,27 @@
 	"invalidToken":"Token invalido",
 	"fileMustBeSent":"Debes enviar los archivos",
 	"fileUploadError":"Error al subir archivos",
-	"methodNotDefined":"Metodo no definido"
+	"methodNotDefined":"Metodo no definido",
+	
+	"auth" : {
+		"wrongEmailOrPassword" : "E-mail o frase clave incorrecta"
+	},
+	
+	"users" : {
+		"encryptError" : "Error al encriptar",
+		"compareHashError" : "Error al comparar hash",
+		"pleaseSendAValidToken" : "Por favor envia un token valido",
+		"verifyError" : "Error de verificación",
+		"expiredToken" : "Token expirado",
+		"invalidToken" : "Token invalido",
+		"pleaseRenewToken" : "Por favor, vuelve a ingresar",
+		"handleRequired" : "Debes enviar tu handle",
+		"handleAlreadyRegistered" : "El handle que enviaste ya esta en uso",
+		"mailAlreadyRegistered" : "El e-mail que enviaste ya esta registrado",
+		"mailRequired" : "Debes enviar tu e-mail",
+		"passwordRequired": "Debes enviar tu frase clave de al menos 4 palabras",
+		"nameRequired": "Debes enviar tu nombre",
+		"privRequired": "Debes enviar el privilegio del usuario"
+	}
+	
 }

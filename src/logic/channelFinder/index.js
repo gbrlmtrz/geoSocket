@@ -1,6 +1,7 @@
 'use strict';
 const config = require('config');
-const db = require("../../database")("geosocket");
+const Channels = require('../Entities').Channels.instance;
+
 const googleMaps = require('@google/maps').createClient({
 	key: config.get("google.mapsapikey"),
 	Promise: Promise
@@ -40,59 +41,79 @@ const calcDistance = function(lat, lon, geometry){
 const findChannelByDistance = function(lat, lon, radius){
 	return new Promise(function(resolve, reject){
 		
-		db.geo('channel', 'geochannel', {
-			lat,
-			lon,
-			radius,
-			relation: "intersects",
-			include_docs: true,
-			nearest: true
-		}, cb);
-		
-		function cb(err, response){
-			if(err){
-				console.log(err);
-				return resolve([]);
-			}else{
-				const docs = [];
-				for(const row of response.rows){
-					if(row.doc)
-						docs.push({_id: row.doc._id, state: row.doc.state, geometry: row.doc.state.geometry, connectedClients: (row.doc.state.connectedClients || 0), distance: calcDistance(lat, lon, row.doc.state.geometry)});
+		Channels.select({
+			geometry: {
+				$near : {
+					$geometry : {
+						type : "Point",
+						coordinates : [lon, lat]
+					},
+					$minDistance : 1,
+					$maxDistance : radius
 				}
-				if(docs.length > 1)
-					docs.sort(sortByDistance);
-				resolve(docs);
 			}
-		};
-		
+		})
+		.then(Response => {
+			if(!Response.success){
+				resolve([]);
+				return;
+			}
+			
+			const docs = [];
+			for(const channel in Response.items){
+				const c = {
+					...channel,
+					distance: calcDistance(lat, lon, channel.geometry)
+				};
+				
+				c.state.connectedClients = c.state.connectedClients || 0;
+				
+				docs.push(c);
+			}
+			
+			if(docs.length > 1)
+				docs.sort(sortByDistance);
+			resolve(docs);
+		})
+		.catch(error => {
+			console.error(error);
+			resolve([])
+		});
 	});
 };
 
 const findChannelByIP = function(lat, lon, ip){
 	return new Promise(function(resolve, reject){
 		
-		db.search('channel', 'ipchannel', {
-			q: `ip:${ip}`,
-			include_docs: true
-		}, cb);
-		
-		function cb(err, response){
-			if(err){
-				console.log(err);
-				return resolve([]);
-			}else{
-				const docs = [];
-				for(const row of response.rows){
-					docs.push({_id: row.doc._id, state: row.doc.state, geometry: row.doc.state.geometry, connectedClients: (row.doc.state.connectedClients || 0), distance: calcDistance(lat, lon, row.doc.state.geometry)});
-				}
-				
-				if(docs.length > 1)
-					docs.sort(sortByDistance);
-				
-				resolve(docs);
+		Channels.select({
+			ips : ip
+		})
+		.then(Response => {
+			if(!Response.success){
+				resolve([]);
+				return;
 			}
-		};
-		
+			
+			const docs = [];
+			for(const channel in Response.items){
+				const c = {
+					...channel,
+					distance: calcDistance(lat, lon, channel.geometry)
+				};
+				
+				c.state.connectedClients = c.state.connectedClients || 0;
+				
+				docs.push(c);
+			}
+			
+			if(docs.length > 1)
+				docs.sort(sortByDistance);
+			resolve(docs);
+		})
+		.catch(error => {
+			console.error(error);
+			resolve([])
+		});
 	});
 };
 
@@ -138,7 +159,6 @@ const findPlaceNearby = function(lat, lon, radius){
 		
 	});
 };
-
 
 module.exports = {
 	findChannelByDistance,

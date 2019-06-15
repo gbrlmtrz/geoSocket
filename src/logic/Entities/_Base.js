@@ -1,13 +1,13 @@
 const Database = require('./_Database');
 const Response = require('./_Response');
-const UUIDValidate = require('uuid-validate');
-const uuid = require('uuid/v4');
+const { ObjectID } = require('mongodb');
 const {makeData, makeFind} = require('../helpers/bodyMakers');
+const Lang = require('../langs/server/es.json');
 
 class Base extends Database{
 
-	constructor(table, schema, valueParsers){
-		super(table, schema, valueParsers);
+	constructor(collection, schema){
+		super(collection, schema);
 	}
 	
 	processInlineBody(schema, body, data){
@@ -32,16 +32,16 @@ class Base extends Database{
 	}
 	
 	async makeFind(body, schema){
-		const data = await makeFind(schema || this._schema, body);
+		const data = await makeFind(schema || this.schema, body);
 		return data;
 	}
 	
 	async makeData(body, schema){
-		const data = await makeData(schema || this._schema, body);
+		const data = await makeData(schema || this.schema, body);
 		return data; 
 	}
 		
-	async deleteFiles(files){
+	deleteFiles(files){
 		if(!Array.isArray(files))
 			files = [files];
 		
@@ -49,20 +49,16 @@ class Base extends Database{
 			FileUtils.deleteFile(file, true);
 	}
 	
-	async handleRemove(lang, item){
-		
-	}
-	
-	async processInline(lang, item){
+	async processInline(lang = Lang, item){
 		
 		const promises = [], keys = [];
 		let newItem = {};
-		this.processInlineBody(this._schema, item, newItem);
+		this.processInlineBody(this.schema, item, newItem);
 		
-		for(const key in this._schema){
-			if(this._schema[key].linkedWith){
+		for(const key in this.schema){
+			if(this.schema[key]._$linkedWith){
 				keys.push(key);
-				promises.push(this._schema[key].linkedWith.doSelectOneInline(lang, item[key]));
+				promises.push(this.schema[key]._$linkedWith.doSelectOneInline(lang, item[key]));
 			}
 		}
 		
@@ -77,12 +73,13 @@ class Base extends Database{
 		return newItem;
 	}
 	
-	async process(lang, item){
+	async process(item, lang = Lang){
 		const promises = [], keys = [];
-		for(const key in this._schema){
-			if(this._schema[key].linkedWith && item[key] !== undefined){
+		
+		for(const key in this.schema){
+			if(this.schema[key]._$linkedWith && item[key] !== undefined){
 				keys.push(key);
-				promises.push(this._schema[key].linkedWith.doSelectOneFull(lang, item[key]));
+				promises.push(this.schema[key]._$linkedWith.doSelectOneFull(item[key], lang));
 			}
 		}
 		
@@ -97,106 +94,254 @@ class Base extends Database{
 		return item;
 	}
 	
-	async doInsert(lang, body){
-		let data = await this.makeData(body);
-		if(Object.keys(data).length > 0){
+	preInsert(data = {}, lang = Lang){
+		return Promise.resolve(new Response(true));
+	}
+	
+	postInsert(response, data = {}, lang = Lang){
+		return Promise.resolve(response);
+	}
+	
+	doInsert(body = {}, lang = Lang){
+		return new Promise(async (resolve, reject) => {
 			
-			for(const key in this._schema){
-				if(this._schema[key].required && !data[key]){
-					return new Response(false, lang[this._schema[key].required]);
+			const data = await this.makeData(body);
+			
+			this.preInsert(data, lang)
+			.then(async (r) => {
+				
+				for(const key in data){
+					if(this.schema.hasOwnProperty(key)){
+						
+						if(this.schema[key].hasOwnProperty("_$linkedWith")){
+							let r = await this.doSelectOne(data[key], lang);
+							if(!r.success){
+								resolve(new Response(false, lang[this.collection][this.schema[key]._$linkedWithMes]));
+								return;
+							}
+						}
+						
+						if(this.schema[key].hasOwnProperty("_$unique")){
+							let r = await this.doSelectOne({[key] : data[key]}, lang);
+							if(r.success){
+								resolve(new Response(false, lang[this.collection][this.schema[key]._$unique]));
+								return;
+							}
+						}
+					}
 				}
+							
+				for(const key in this.schema){
+					if(this.schema[key].hasOwnProperty("_$insertRequired") && !data.hasOwnProperty(key)){
+						resolve(new Response(false, lang[this.collection][this.schema[key]._$insertRequired]));
+						return;
+					}
+				}
+				
+				
+				if(Object.keys(data).length == 0){
+					resolve(new Response(false, lang.emptyBodyError));
+					return;
+				}
+				
+				data.inserted = Date.now();
+					
+				this.insertOne(data, lang)
+				.then(response => this.postInsert(response, data, lang))
+				.then(resolve)
+				.catch(reject);
+			})
+			.catch(reject);
+		});
+	}
+	
+	preUpdate(oldBody = {}, data = {}, query = {}, lang = Lang){
+		return Promise.resolve(new Response(true));
+	}
+	
+	postUpdate(response, oldBody = {}, data = {}, query = {}, lang = Lang){
+		response.item = {...oldBody, ...data.$set};
+		return Promise.resolve(response);
+	}
+	
+	doUpdate(oldBody = null, body = {}, filter = {}, lang = Lang){
+		return new Promise(async (resolve, reject) => {
+			
+			if(oldBody == null){
+				reject(new Response(false, lang.mustSendOldBody));
+				return;
 			}
 			
-			let res = await this.insert(lang, data);
-			return res;
-		}else
-			return new Response(false, lang.emptyBodyError);
+			const data = await this.makeData(body);
+			const query = await this.makeFind(filter);
+
+			this.preUpdate(oldBody, data, query, lang)
+			.then((r) => {
+				
+				
+				for(const key in data){
+					if(this.schema.hasOwnProperty(key)){
+						
+						if(this.schema[key].hasOwnProperty("_$linkedWith")){
+							let r = this.schema[key]._$linkedWith.doSelectOne(data[key], lang);
+							if(!r.success){
+								resolve(new Response(false, lang[this.collection][this.schema[key]._$linkedWithMes]));
+								return;
+							}
+						}
+						
+						if(this.schema[key].hasOwnProperty("_$unique")){
+							let r = this.doSelectOne({[key] : data[key], "_id_ne" : new ObjectID(oldBody._id)}, lang);
+							if(r.success){
+								resolve(new Response(false, lang[this.collection][this.schema[key]._$unique]));
+								return;
+							}
+						}
+					}
+				}
+				
+				
+				if(Object.keys(data).length == 0 || Object.keys(query) == 0){
+					resolve(new Response(false, lang.emptyBodyError));
+					return;
+				}
+				
+				data.lastUpdate = Date.now();
+
+				this.updateOne(query, {$set : data}, {upsert : true}, lang)
+				.then(response => this.postUpdate(response, oldBody, data, query, lang))
+				.then(resolve)
+				.catch(reject);
+			})
+			.catch(reject);
+		});
 	}
 	
-	async doUpdate(lang, oldBody, body){
-		let data = await this.makeData(body);
-		data.lastUpdate = Date.now();
-		if(Object.keys(data).length > 0){
-			return await this.updateOne(lang, oldBody, data);
-		}else
-			return new Response(false, lang.emptyBodyError);
+	preRemove(find = {}, lang = Lang){
+		return Promise.resolve(new Response(true));
 	}
 	
-	async doRemove(lang, id, rev){
-		let res = this.deleteOne(lang, id, rev);
-		return res;
+	postRemove(response, find, lang = Lang){
+		return Promise.resolve(response);
 	}
 	
-	async doSelect(lang, body, order, skip, limit, projection){
+	doRemove(filter = {}, lang = Lang){
+		return new Promise(async (resolve, reject) => {
+			
+			let find = await this.makeFind(filter);
+			
+			this.preRemove(find)
+			.then((r) => {
+				
+				if(Object.keys(find) == 0){
+					resolve(new Response(false, lang.emptyBodyError));
+				}
+				
+				this.select(filter, [], -1, -1, {}, lang)
+				.then(items => {
+					if(!items.success)
+						return new Response(false, lang.searchError);
+					
+					if(items.items.length == 0)
+						return new Response(false, lang.nothingToRemove);
+					
+					for(const item in items.items)
+						this.itemRemoval(item);
+					
+					return this.deleteMany(find, lang);
+				})
+				.then(response => this.postRemove(response, find, lang))
+				.then(resolve)
+				.catch(reject);
+				
+			})
+			.catch(reject)
+		});
+	}
+	
+	async doSelect(body = {}, order = [], skip = -1, limit = -1, projection = {}, lang = Lang){
 		let data = await this.makeFind(body);
-		let res = await this.select(lang, data, order, skip, limit, projection);
+		let res = await this.select(data, order, skip, limit, projection, lang);
 		return res;
 	}
 	
-	async doSelectFull(lang, body, order, skip, limit, projection){
+	async doSelectFull(body = {}, order = [], skip = -1, limit = -1, projection = {}, lang = Lang){
+		
 		let data = await this.makeFind(body);
 		
-		let res = await this.select(lang, data, order, skip, limit, projection);
+		let res = await this.select(data, order, skip, limit, projection, lang);
+		
 		if(res.success && res.items.length > 0){
 			res.items = await Promise.all( res.items.map( async (item) => {
-				return this.process(lang, item);
+				return this.process(item, lang);
 			}) );
 		}
 		return res;
 	}
 	
-	async doSelectFullInline(lang, body, order, skip, limit){
+	async doSelectFullInline(body = {}, order = [], skip = -1, limit = -1, projection = {}, lang = Lang){
 		let data = await this.makeFind(body);
-		let res = await this.select(lang, data, order, skip, limit);
+		let res = await this.select(data, order, skip, limit, projection, lang);
+		
 		if(res.success && res.items.length > 0){
 			res.items = await Promise.all( res.items.map( async (item) => {
-				return this.processInline(lang, item);
+				return this.processInline(item, lang);
 			}) );
 		}
 		return res;
 	}
 	
-	async doSelectOne(lang, body){
-		let data = await this.makeFind(body);
-		return await this.selectOne(lang, data);
+	async doSelectOne(body, lang = Lang){
+		let data;
+		
+		if(typeof body == "object"){
+			data = await this.makeFind(body);
+		}else if(ObjectID.isValid(body)){
+			data = {_id : new ObjectID(body)};
+		}else
+			return new Response(false, lang.searchNoBody);
+		
+		return await this.selectOne(data, {}, {}, lang);
 	}
 	
-	async doSelectOneInline(lang, item){
+	async doSelectOneInline(item, lang = Lang){
 		if(item === undefined)
 			return new Response(false, item);
-		if(UUIDValidate(item)){
-			let promise = await this.selectOne(lang, {"_id": item});
+		
+		if(ObjectID.isValid(item)){
+			let promise = await this.selectOne({"_id": item}, {}, {}, lang);
 			if(!promise.success)
 				return new Response(false, item);
 			item = promise.item;
 		}
 		
 		let inline = "";
-		for(const key in this._schema){
-			if(this._schema[key].inline){
-				inline += this._inlineParsers[this._schema[key].type](item[key], this._schema[key]) + " ";
+		for(const key in this.schema){
+			if(this.schema[key].inline){
+				inline += this._inlineParsers[this.schema[key].type](item[key], this.schema[key]) + " ";
 			}
 		}
 		
 		return new Response(true, inline.trim());
 	}
 	
-	async doSelectOneFull(lang, item){
+	async doSelectOneFull(item, lang = Lang){
 		if(item === undefined)
 			return new Response(false, item);
-		if(UUIDValidate(item)){
-			let promise = await this.selectOne(lang, {"_id": item});
+		
+		if(ObjectID.isValid(item)){
+			let promise = await this.selectOne({"_id": item}, {}, {}, lang);
 			if(promise.success){
-				return new Response(true, await this.process(lang, promise.item));
+				return new Response(true, await this.process(promise.item, lang));
 			}else return promise;
 		}else if(typeof item === 'object'){
-			return new Response(true, await this.process(lang, item));
+			return new Response(true, await this.process(item, lang));
 		}
 	}
 	
-	async doCount(lang, body){
+	async doCount(body, lang = Lang){
 		let data = await this.makeFind(body);
-		return await this.count(lang, data);
+		return await this.count(data, lang);
 	}
 
 }

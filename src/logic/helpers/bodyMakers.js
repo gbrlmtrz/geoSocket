@@ -1,6 +1,9 @@
 const moment = require('moment');
 const steed = require('./steedz')();
 const UUIDValidate = require('uuid-validate');
+const { ObjectID } = require('mongodb');
+const Isemail = require('isemail');
+const objectCopy  = require("fast-copy").default;
 
 const milesToRadian = (miles) => {
 	return parseFloat(miles) / 3959;
@@ -97,40 +100,48 @@ const IP = {
 };	
 
 const VPs = {
+	object(key, cb){
+		const schema = this.schema[key].properties;
+		
+		if(typeof this.data[key] != "object"){
+			cb(null, null);
+			return;
+		}
+	
+		makeData(schema, this.data[key])
+		.then(val => cb(null, val))
+		.catch(() => cb(null, null));
+	},
 	array(key, cb){
-		const schema = this.schema[key].items.properties;
+		const schema = this.schema[key].items;
+		
 		let value = [];
-		const promises = [];
+		
 		if(!Array.isArray(this.data[key])){
 			value.push(this.data[key]);
 		}else
 			value = this.data[key];
 		
-		for(const entry of value){
-			promises.push(makeData(schema, entry));
-		}
-		
-		Promise.all(promises)
+		makeArrayData(schema, value)
 		.then(results => {
-			const returns = [];
-			for(const result of results){
-				if(Object.keys(result).length > 0){
-					returns.push(result);
-				}
-			}
-			if(returns.length > 0)
-				cb(null, returns);
+			
+			if(results.length > 0)
+				cb(null, results);
 			else
 				cb(null, null);
+			
 		})
 		.catch( e => {
+			console.log(key, e);
+			
 			cb(null, null);
 		})
 	},
-	/*objectid(key, cb){
+	objectid(key, cb){
 		if(!ObjectID.isValid(this.data[key])) {cb(null, null); return;}
+		
 		cb(null, new ObjectID(this.data[key]));
-	},*/
+	},
 	uuid(key, cb){
 		let value = String(this.data[key]);
 		if(UUIDValidate(value)){
@@ -138,6 +149,21 @@ const VPs = {
 		}else{
 			cb(null, null);
 		}
+	},
+	email(key, cb){
+		if(this.data[key] === null){
+			cb(null, null);
+			return;
+		}
+		
+		let value = String(this.data[key]);
+		
+		if(!Isemail.validate(value)){
+			cb(null, null);
+		}
+		
+		value = value.toLowerCase().trim();
+		cb(null, value);
 	},
 	string(key, cb){
 		let value = String(this.data[key]);
@@ -150,18 +176,28 @@ const VPs = {
 				cb(null, null);
 				return;
 			}
-			if(this.schema[key].pattern !== undefined && !this.schema[key].pattern.test(this.data[key])){
-				cb(null, null);
-				return;
+			
+			if(this.schema[key].hasOwnProperty("_$pattern")){
+				const r = new RegExp(this.schema[key]._$pattern, 'gi');
+				if(!r.test(value)){
+					cb(null, null)
+					return;
+				}
 			}
+			
 			if(this.schema[key].toLowerCase !== undefined)
 				value = value.toLowerCase();
 		}
+		
+		value = value.trim();
 		cb(null, value);
 	},
 	integer(key, cb){
-		if(isNaN(this.data[key])) cb(null, null);
+		if(isNaN(this.data[key])) 
+			cb(null, null);
+		
 		let value = parseInt(this.data[key]);
+		
 		if(this.schema[key] !== undefined && typeof this.schema[key] == "object"){
 			if(this.schema[key].minimum !== undefined && value < this.schema[key].minimum){
 				cb(null, null);
@@ -315,7 +351,7 @@ const Actions = {
 			return;
 		}
 		cb(null, {
-			"$geometry" : { 
+			$geometry : { 
 				type: "Point", 
 				coordinates: [ this.data[key][0][0], this.data[key][0][1] ] 
 			}
@@ -432,14 +468,14 @@ function getKeyAndAction(index, cb){
 		cb(null, {valid: false, orgName});
 }
 
-async function applyFilter(key, cb){
+function applyFilter(key, cb){
 	const promises = [];
 	for(let kkey in this.data[key].values){
 		
 		const tempData = {}, tempCalls = {}, tempSchema = {};
 		
 		tempData[this.data[key].actions[kkey]] = this.data[key].values[kkey];
-		tempCalls[this.data[key].actions[kkey]] = VPs[this.schema[key].$filter];
+		tempCalls[this.data[key].actions[kkey]] = VPs[this.schema[key]._$filter || this.schema[key].type];
 		tempSchema[this.data[key].actions[kkey]] = this.schema[key];
 		
 		promises.push(
@@ -447,8 +483,13 @@ async function applyFilter(key, cb){
 		);
 		
 	}
-	const results = await Promise.all(promises);
-	cb(null, results);
+	
+	Promise.all(promises)
+	.then(results => cb(null, results))
+	.catch(e => {
+		console.log(e);
+		cb(null, null);
+	});
 };
 
 async function applyActions(key, cb){
@@ -457,7 +498,9 @@ async function applyActions(key, cb){
 		calls[key] = Actions[key];
 	}
 	const results = await steed.parallel(new ActionState(obj), calls);
+	
 	let newObject;
+	
 	for(let key in results){
 		if(typeof results[key] == "object"){
 			if(newObject == null) 
@@ -472,11 +515,33 @@ async function applyActions(key, cb){
 	cb(null, newObject);
 }
 
-async function makeData(sch, dat){
+async function makeArrayData(sch, dat){
+	
 	const orders = {};
+	const resArray = [];
+	const arrSch = {};
+	
+	for(let key in dat){
+		orders[key] = VPs[sch.$filter || sch.type];
+		arrSch[key] = sch;
+	}
+	
+	const results = await steed.parallel(new ValueState(arrSch, dat), orders);
+	for(let key in results)
+		if(results[key] !== null)
+			resArray.push(results[key]);
+
+	return resArray;
+}
+
+async function makeData(sch, data){
+	const orders = {};
+	
+	const dat = objectCopy(data);
+	
 	for(let key in dat){
 		if(sch.hasOwnProperty(key)){
-			orders[key] = VPs[sch[key].$filter];
+			orders[key] = VPs[sch[key].$filter || sch[key].type];
 		}
 	}
 	
@@ -484,11 +549,14 @@ async function makeData(sch, dat){
 	for(let key in results)
 		if(results[key] === null)
 			delete results[key];
+	
 	return results;
 }
 
-async function makeFind(sch, data){
-	if(typeof data != "object") return {};
+async function makeFind(sch, dat){
+	if(typeof dat != "object") return {};
+	
+	const data = objectCopy(dat);
 	
 	const keys = Object.keys(data);
 	if(keys.length == 0) return {};

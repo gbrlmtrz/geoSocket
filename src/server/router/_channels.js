@@ -1,7 +1,7 @@
 'use strict';
 const {getRedis} = require("../../redis");
 const redis = getRedis("writer");
-const Response = require("../../logic/entities/_Response");
+const Response = require("../../logic/Entities/_Response");
 
 module.exports = {
 	routes: [
@@ -43,7 +43,7 @@ module.exports = {
 					}
 				}
 			}, 
-			handler: async function(req, reply){
+			handler: function(req, reply){
 				
 			}
 		},
@@ -94,7 +94,6 @@ module.exports = {
 					console.log(err);
 					reply.send(new Response(false, req.lang.databaseError));
 				});
-				;
 			}
 		}	
 	]

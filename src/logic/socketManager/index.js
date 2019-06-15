@@ -1,6 +1,7 @@
 "use strict";
 let wss;
 let pingInterval;
+
 const Lang = require('../langs/server/es.json');
 const pako = require('pako');
 const str2ab = require('string-to-arraybuffer');
@@ -11,7 +12,6 @@ const os = require('os');
 const {Server} = require("ws");
 const config = require("config");
 const objectCopy  = require("fast-copy").default;
-const db = require("../../database")("geosocket");
 const ChannelsEntity = require("../Entities").Channels.instance;
 const {getChannelKey, getRedis} = require("../../redis");
 const {findChannelByDistance, findChannelByIP, findPlaceNearby} = require("../channelFinder");
@@ -133,7 +133,7 @@ const getChannelCommitFunction = function(channel){
 			}
 				
 				
-			ChannelsEntity.updateOne(Lang, channelState, channelState)
+			ChannelsEntity.updateOne({"state.cid": channel}, {$set : channelState})
 			.then(r => {
 				clearTimeout(hardUpdates.get(channel));
 				hardUpdates.delete(channel);
@@ -150,42 +150,39 @@ const getChannelCommitFunction = function(channel){
 const getChannelUpdateFunction = function(key){
 	return function channelUpdate(){
 		clearTimeout(channelPatches.get(key).updates.timeout);
+		
 		const states = channelPatches.get(key).updates;
 		channelPatches.delete(key);
+		
 		let obj = channelStates.get(key);
 		for(const state of states){
 			obj = update(obj, {state});
 		};
 		
 		if(obj.state.connectedClients == 0){
-			pub.del(`channel_${key}`, ()=>{});
-			pub.del(`updater_${key}`, ()=>{});
+			
+			pub.del(`channel_${key}`, () => {});
+			pub.del(`updater_${key}`, () => {});
+			
 			sub.unsubscribe(`updates_${key}`, (err) => { if(err) console.error(err); });
+			
 			if(hardUpdates.has(key)){
 				clearTimeout(hardUpdates.get(key));
 				hardUpdates.delete(key);
 			}
 			
-			/*ChannelsEntity.deleteOne(Lang, key)
-			.then(() => {
-			})
-			.catch((e) => {
-				console.error("ChannelsEntity.deleteOne", e);
-			});*/
-			
-			
 			obj.disabled = true;
-			ChannelsEntity.updateOne(Lang, obj, obj)
-			.then(() => {
-			})
+			ChannelsEntity.removeOne({"state.cid": key})
+			.then(() => {})
 			.catch((e) => {
-				console.error("ChannelsEntity.updateOne", e);
+				console.error("ChannelsEntity.removeOne", e);
 			});
 			
 		}else{
 			channelStates.set(key, obj);
 			pub.set(`channel_${key}`, JSON.stringify(obj), (err) => {
 				if(err) console.error(err);
+				
 				if(!hardUpdates.has(key))
 					hardUpdates.set(key, setTimeout(getChannelCommitFunction(key), config.get("channelSettings.commitUpdatesInSeconds") * 1000))
 			});	
@@ -292,23 +289,24 @@ const onPMessage = function(chnl, message){
 
 const loopSuitorChannels = function(socket, goodCandidate, channels){
 	for(const channel of channels){
-		if(channel._id == socket.state.channel)
+		
+		if(channel.state.cid == socket.state.channel)
 			continue;
 		
-		if(channel.connectedClients >= config.get("channelSettings.maxClients")){
+		if(channel.state.connectedClients >= config.get("channelSettings.maxClients")){
 			continue;
 		}
 		 
-		if(channel.connectedClients < config.get("channelSettings.clientsToDissolve")){
+		if(channel.state.connectedClients < config.get("channelSettings.clientsToDissolve")){
 			goodCandidate = channel;
 			return;
 		}
 		
-		channel.abs = Math.abs(config.get("channelSettings.wantedClients") - channel.connectedClients);
+		channel.abs = Math.abs(config.get("channelSettings.wantedClients") - channel.state.connectedClients);
 		
 		if(goodCandidate == null || channel.abs < goodCandidate.abs){ 
 			goodCandidate = channel;
-		}	 
+		}
 	}
 	return goodCandidate;
 };
@@ -317,11 +315,13 @@ const findSuitor = function(socket){
 	let goodCandidate = null;
 	
 	const channelsByIPCB = function(channelsByIP){
+		
 		if(channelsByIP.length > 0){
 			goodCandidate = loopSuitorChannels(socket, goodCandidate, channelsByIP);
+			
 			if(goodCandidate){
 				socket.switch = true;
-				socket.onClose(null, null, goodCandidate._id);
+				socket.onClose(null, null, goodCandidate.state.cid);
 				return;
 			}
 		}
@@ -329,9 +329,10 @@ const findSuitor = function(socket){
 		const channelsByLatLonCB = function(channelsByLatLon){
 			if(channelsByLatLon.length > 0){
 				goodCandidate = loopSuitorChannels(socket, goodCandidate, channelsByLatLon);
+				
 				if(goodCandidate){
 					socket.switch = true;
-					socket.onClose(null, null, goodCandidate._id);
+					socket.onClose(null, null, goodCandidate.state.cid);
 					return;
 				}
 			}
@@ -460,7 +461,6 @@ const onClose = function(foo, bar, toChannel){
 	const cName = `channel_${this.state.channel}`;
 	const socketState = objectCopy(this.state);
 	
-	
 	if(config.get("channelSettings.keepOneConnectionPerPC")){
 		pub.get(`client_${this.state.pcid}`, (err, client) => {
 			if(err){
@@ -494,18 +494,20 @@ const onClose = function(foo, bar, toChannel){
 		channelState = channelState.item;
 		channelState.state.connectedClients = channelState.state.connectedClients - 1;
 		
-		const newState = {
-			connectedClients : { $inc : -1 },
-			clients: { $pull : socketState.id },
+		const command = {
 			ips: { $pull : socketState.ip },
-			geometry : { coordinates : {$pull: [socketState.lon, socketState.lat] } }
+			geometry : { coordinates : {$pull: [socketState.lon, socketState.lat] } },
+			state: {
+				connectedClients : { $inc : -1 },
+				clients: { $pull : socketState.id }
+			}
 		};
 		
 		for(const event of Events.values())
 			if(event.hasOwnProperty("onClose") && event.onClose != undefined)
-				event.onClose(socketState, newState);
+				event.onClose(socketState, command);
 		
-		pub.publish(`updates_${socketState.channel}`, JSON.stringify(newState));
+		pub.publish(`updates_${socketState.channel}`, JSON.stringify(command));
 	});
 	
 	if(config.get("channelSettings.emitDisconnects"))
@@ -588,6 +590,7 @@ const onConnection = function(socket, request){
 	
 	if(!socket.hasOwnProperty("state")){
 		const query = request.socketQuery;
+		
 		socket.state = {
 			id: nanoid(),
 			pcid: query.pcid,
@@ -599,6 +602,7 @@ const onConnection = function(socket, request){
 	}
 
 	if(config.get("channelSettings.keepOneConnectionPerPC")){
+		
 		pub.get(`client_${socket.state.pcid}`, (err, client) => {
 			if(err){
 				console.error(err);
@@ -614,6 +618,7 @@ const onConnection = function(socket, request){
 					pub.publish(`server_${pieces[0]}`, JSON.stringify({command: "terminate", client: socket.state.pcid, reason: "byOtherCon"}));
 			}
 		});
+		
 	}
 	
 	if(!Channels.has(socket.state.channel)){		
@@ -635,29 +640,25 @@ const onConnection = function(socket, request){
 		
 		channel = JSON.parse(channel);
 		
-		channel.state.ips.push(socket.state.ip);
-		channel.state.geometry.coordinates.push([socket.state.lon, socket.state.lat]);
+		channel.ips.push(socket.state.ip);
+		channel.geometry.coordinates.push([socket.state.lon, socket.state.lat]);
 		
 		channel.state.clients.push(socket.state.id);
 		channel.state.connectedClients = (channel.state.connectedClients || 0) + 1;
 		
-		const pChannel = objectCopy(channel.state);
-		
-		delete pChannel.ips;
-		delete pChannel.geometry;
-		
-		let sed = serializeAndCompress({event: "channel", sender: ServerName, payload: {channel: pChannel}});
-		
+		const sed = serializeAndCompress({event: "channel", sender: ServerName, payload: {channel: channel.state}});
 		socket.send(sed);
 		
-		const newState = {
-			connectedClients : { $inc : 1 },
-			clients: { $push : [socket.state.id] },
+		const command = {
 			ips: { $push : [socket.state.ip] },
-			geometry : { coordinates : { $push: [[socket.state.lon, socket.state.lat]] } }
+			geometry : { coordinates : { $push: [[socket.state.lon, socket.state.lat]] } },
+			state : {
+				connectedClients : { $inc : 1 },
+				clients: { $push : [socket.state.id] }
+			}
 		};
 		
-		pub.publish(`updates_${socket.state.channel}`, JSON.stringify(newState));
+		pub.publish(`updates_${socket.state.channel}`, JSON.stringify(command));
 		
 		checkForResponsableServersHealth(socket.state.channel, channel);
 	});
@@ -675,21 +676,18 @@ const getRandom = function(list){
 };
 
 const createChannel = function(query, filledChannels, cb){
-	const cid = query.channel || nanoid();
+	
 	const Channel = {
-		_id: cid,
-		type: "Feature",
-		collection: "channels",
 		created: Date.now(),
+		geometry: {
+			type: "MultiPoint",
+			coordinates: []
+		},
+		ips: [],
 		state: {
-			id : cid,
+			id : query.channel || nanoid(),
 			connectedClients: 0,
-			ips: [],
-			clients: [],
-			geometry: {
-				type: "MultiPoint",
-				coordinates: []
-			}
+			clients: []
 		}
 	};
 
@@ -703,18 +701,18 @@ const createChannel = function(query, filledChannels, cb){
 			return;
 		}
 		
-		pub.set(`channel_${Channel._id}`, JSON.stringify(Channel), (err) => {
+		pub.set(`channel_${Channel.state.cid}`, JSON.stringify(Channel), (err) => {
 			if(err){
 				console.error("insert err", err);
 				cb(false);
 				return;
 			}
 			
-			sub.subscribe(`updates_${Channel._id}`, (err, count) => { if(err) console.error(err); });
-			pub.set(`updater_${Channel._id}`, ServerName);
+			sub.subscribe(`updates_${Channel.state.cid}`, (err, count) => { if(err) console.error(err); });
+			pub.set(`updater_${Channel.state.cid}`, ServerName);
 			
-			channelStates.set(Channel._id, Channel);
-			query.channel = Channel._id;
+			channelStates.set(Channel.state.cid, Channel);
+			query.channel = Channel.state.cid;
 			
 			cb(true);
 			
@@ -728,13 +726,15 @@ const createChannel = function(query, filledChannels, cb){
 				}
 				
 				if(goodPlace){
-										
-					const newState = {
-						channelName: { $set : goodPlace.name },
-						geometry : { coordinates : { $push: [goodPlace.geometry.coordinates] } }
+					
+					const command = {
+						geometry : { coordinates : { $push: [goodPlace.geometry.coordinates] } },
+						state : {
+							channelName: { $set : goodPlace.name }
+						}
 					};
 					
-					addToUpdateQueue(Channel._id, newState);
+					addToUpdateQueue(Channel.state.cid, command);
 				}			
 			};
 			
@@ -749,7 +749,7 @@ const createChannel = function(query, filledChannels, cb){
 					for(let i = 0; i < (config.get("channelSettings.wantedClients")-1); i++){
 						const {_id, state} = values.next().value;
 						const client = getRandom(state.clients);
-						publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel._id, clients: [client._id]}});
+						publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel.state.cid, clients: [client._id]}});
 					}
 				}else{
 					const it = filledChannels.values();
@@ -767,7 +767,7 @@ const createChannel = function(query, filledChannels, cb){
 							clientsToSwitch.push(client);
 						}
 						needed = needed - clientsToSwitch.length;
-						publish(_id, {event: "switchChannel", sender: ServerName, payload:{toChannel: Channel._id, clients: clientsToSwitch}});
+						publish(_id, {event: "switchChannel", sender: ServerName, payload: { toChannel: Channel.state.cid, clients: clientsToSwitch}});
 						chn = it.next();
 					}
 				}
@@ -775,24 +775,25 @@ const createChannel = function(query, filledChannels, cb){
 		});
 	};
 
-	ChannelsEntity.insertOne(Lang, Channel)
+	ChannelsEntity.insertOne(Channel)
 	.then(ChannelEntityCB)
 	.catch( e => console.error("ChannelsEntity.insertOne", e));
 };
 
 const loopChannels = function(query, goodCandidate, channels, filledChannels){
 	for(const channel of channels){
-		if(channel.connectedClients >= config.get("channelSettings.maxClients")){
-			filledChannels.set(channel._id, channel);
+		
+		if(channel.state.connectedClients >= config.get("channelSettings.maxClients")){
+			filledChannels.set(channel.state.cid, channel);
 			continue;
 		}
 		 
-		if(channel.connectedClients < config.get("channelSettings.clientsToDissolve")){
-			query.channel = channel._id;
+		if(channel.state.connectedClients < config.get("channelSettings.clientsToDissolve")){
+			query.channel = channel.state.cid;
 			return;
 		}
 		
-		channel.abs = Math.abs(config.get("channelSettings.wantedClients") - channel.connectedClients);
+		channel.abs = Math.abs(config.get("channelSettings.wantedClients") - channel.state.connectedClients);
 		
 		if(goodCandidate == null || channel.abs < goodCandidate.abs){ 
 			goodCandidate = channel;
@@ -816,7 +817,7 @@ const findChannel = function(query, cb){
 			}
 			
 			if(goodCandidate){
-				query.channel = goodCandidate._id;
+				query.channel = goodCandidate.cid;
 				cb(true);
 				return;
 			}
@@ -825,6 +826,7 @@ const findChannel = function(query, cb){
 		const channelsByLatLonCB = function(channelsByLatLon){
 			if(channelsByLatLon.length > 0){
 				goodCandidate = loopChannels(query, goodCandidate, channelsByLatLon, filledChannels);
+				
 				if(query.channel){
 					cb(true);
 					return;
@@ -832,7 +834,7 @@ const findChannel = function(query, cb){
 			}
 			
 			if(goodCandidate){
-				query.channel = goodCandidate._id;
+				query.channel = goodCandidate.cid;
 				cb(true);
 			}else{
 				createChannel(query, filledChannels, cb);
@@ -861,6 +863,7 @@ const clientVerifier = function(info, cb){
 		query.ip = getIPFromConnection(info.req);
 		
 		info.req["socketQuery"] = query;
+		
 		if(query.channel){
 			pub.get(`channel_${query.channel}`, function(err, channel){
 				if(err){

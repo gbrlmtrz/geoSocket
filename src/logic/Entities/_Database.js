@@ -1,128 +1,127 @@
 const moment = require('moment');
 const Response = require('./_Response');
-const conn = require('../../database')("geosocket");
-const uuid = require('uuid/v4');
+const conn = require('../../database');
+const Lang = require('../langs/server/es.json');
+const objectCopy  = require("fast-copy").default;
 
 class Database{
 	
-	constructor(table = '', schema = {}){
-		this._schema = schema;
-		this.table = table;
+	constructor(collection = '', schema = {}){
+		this.schema = objectCopy(schema);
+		this.collection = collection;
+		for(const key in this.schema){
+			if(this.schema[key].hasOwnProperty("_$index")){
+				this.createIndex(key, this.schema[key]._$index, this.schema[key].hasOwnProperty("_$unique"));
+			}
+		}
 	}
 	
-	async insertOne(lang = {}, body = {}){
+	createIndex(key, index, unique = false){
+		conn.getCollection(this.collection)
+		.then( col => col.createIndex({[key]: index}, {unique : unique}))
+		.then( r => console.log("indexResult", r))
+		.catch( error =>{ throw new Error(error) });
+	}
+	
+	insertOne(body = {}, lang = Lang){
 		return new Promise((resolve, reject) => {
-			if(!body.hasOwnProperty("_id"))
-				body._id = uuid();
-			
-			if(!body.hasOwnProperty("collection"))
-				body.collection = this.table;
-			
-			conn.insert(body, (err, data) => {
-				if(err){
-					console.log(err);
-					reject(new Response(false, lang.insertError));	
+			conn.getCollection(this.collection)
+			.then(col => col.insertOne(body))
+			.then(res => {
+				if(res.insertedCount == 1){
+					body._id = res.insertedId;
+					resolve(new Response(true, body));					
 				}else{
-					resolve(new Response(true, body));
+					reject(new Response(false, lang.insertError));
 				}
+			})
+			.catch(error => {
+				console.log(error);
+				reject(new Response(false, lang.insertError));
 			});
-			
 		});
 	}
 	
-	async insertMany(lang = {}, body = []){
+	insertMany(body = [], lang = Lang){
 		return new Promise((resolve, reject) => {
-			
-			for(const key in body){				
-				body[key]._id = uuid();
-				body[key].collection = this.table;
-				
-			}
-			
-			conn.bulk({docs:body}, (err, result) => {
-				if(err){
-					console.log(err);
-					reject(new Response(false, lang.insertError));	
+			conn.getCollection(this.collection)
+			.then(col => col.insertMany(body))
+			.then(res => {
+				if(res.insertedCount == body.length){
+					for(const key in body){
+						body[key]._id = res.insertedIds[key];
+					}
+					resolve(new Response(true, body));					
 				}else{
-					resolve(new Response(true, body));
+					reject(new Response(false, lang.insertError));
 				}
+			})
+			.catch(error => {
+				console.log(err);
+				reject(new Response(false, lang.insertError));
 			});
-			
 		});
 	}
 	
-	async updateOne(lang = {}, oldBody = {}, data = {}){
-		return new Promise(async (resolve, reject) => {
+	updateOne(query = {}, body = {}, extra = {upsert : true}, lang = Lang){
+		return new Promise((resolve, reject) => {
 			
-			if(!oldBody._id)
-				return reject(new Response(false, lang.mustSendID));
-			
-			data = {...oldBody, ...data, collection: this.table};
-			
-			if(!oldBody._rev){
-				const oldDocument = await this.selectOne(lang, {_id : oldBody._id});
+			conn.getCollection(this.collection)
+			.then(col => col.updateOne(query, body, extra))
+			.then(res => {
 				
-				if(!oldDocument.success)
-					return reject(oldDocument);
-				
-				data = {...data, _rev : oldDocument.item._rev};
-			}else{
-				data = {...data, _rev : oldBody._rev};
-			}
-			
-			conn.insert(data, async (err, res) => {
-				if(err){
-					console.error(err);
+				if(res.modifiedCount == 1){
+					resolve(new Response(true, body));					
+				}else if(res.upsertedCount == 1){
+					body._id = res.upsertedId;
+					resolve(new Response(true, body));	
+				}else{
 					reject(new Response(false, lang.updateError));
-				}else{
-					//await this.deleteOne(lang, data._id, data._rev);
-					resolve(new Response(true, data));
 				}
+			})
+			.catch(error => {
+				reject(new Response(false, lang.updateError));
 			});
 		});
 	}
 	
-	async deleteOne(lang = {}, id, rev){
-		return new Promise(async (resolve, reject) => {
-			
-			if(!id)
-				return reject(new Response(false, lang.mustSendID));
-			
-			if(!rev){
-				const oldDocument = await this.selectOne(lang, {_id : id});
-				
-				if(!oldDocument.success)
-					return reject(oldDocument);
-				rev = oldDocument.item._rev;
-			}
-				
-			
-			conn.destroy(id, rev, (err, res) => {
-				if(err){
-					console.log(err);
-					resolve(new Response(false, lang.deleteError));
-				}else{
-					resolve(new Response(true));
-				}
-			});
-		});
-	}
-	
-	/*async deleteMany(lang = {}, filter = {}){
+	deleteOne(filter = {}, lang = Lang){
 		return new Promise((resolve, reject) => {
-			this.table.deleteMany(filter)
+			
+			conn.getCollection(this.collection)
+			.then(col => col.deleteOne(filter))
+			.then( res => {
+				if(res.deletedCount == 1){
+					resolve(new Response(true, 1));
+				}else{
+					reject(new Response(false, lang.removeError));
+				}
+			})
+			.catch( error => {
+				reject(new Response(false, lang.removeError));
+			});
+		});
+	}
+	
+	deleteMany(filter = {}, lang = Lang){
+		return new Promise((resolve, reject) => {
+			
+			conn.getCollection(this.collection)
+			.then(col => col.deleteMany(filter))
 			.then( result => {
 				resolve(new Response(true, result.deletedCount));
 			})
 			.catch( err => {
 				reject(new Response(false, lang.removeError));
 			});
+		
 		});
 	}
 	
-	async count(lang = {}, filter = {}){
+	count(filter = {}, lang = Lang){
 		return new Promise((resolve, reject) => {
-			this.table.count(filter)
+			conn.getCollection(this.collection)
+			.then(col => col.countDocuments(filter))
 			.then( (count) => {
 				resolve(new Response(true, count));
 			})
@@ -131,73 +130,58 @@ class Database{
 				reject(new Response(false, lang.countError));
 			});
 		});
-	}*/
+	}
 	
-	async select(lang = {}, filter = {}, order = [], skip = -1, limit = -1, fields = ''){
+	select(filter = {}, sort = [], skip = -1, limit = -1, projection = {}, lang = Lang){
 		return new Promise((resolve, reject) => {
 			
-			const query = {
-				selector : {...filter, collection : this.table}
-			};
+			const options = {};
 			
-			if(order.length > 0)
-				query.order = order;
+			if(sort.length > 0)
+				options.sort = sort;
 			
 			if(skip >= 0)
-				query.skip = skip;
+				options.skip = skip;
 			
 			if(limit >= 0)
-				query.limit = limit;
+				options.limit = limit;
 			
-			if(fields.length > 0){
-				fields = fields.split(",");
-				if(fields.length > 0){
-					query.fields = fields;
-				}
+			if(projection.length > 0){
+				options.projection = projection;
 			}
 			
-			conn.find(query, (err, result) => {
-				if(err){
-					console.log(err);
-					reject(new Response(false, lang.searchError));
-				}else{
-					if(result.docs.length > 0)
-						resolve(new Response(true, result.docs));
-					else
-						resolve(new Response(true, []));
-				}
+			conn.getCollection(this.collection)
+			.then(col => col.find(filter, options).toArray())
+			.then( result => {
+				resolve(new Response(true, result));
+			})
+			.catch( error => {
+				console.log(error);
+				reject(new Response(false, lang.searchError));
 			});
 		});
 	}
 	
-	async selectOne(lang = {}, find = {}){
+	selectOne(find = {}, projection = {}, sort = [], lang = Lang){
 		return new Promise((resolve, reject) => {
+			const options = {
+				projection : projection,
+				sort : sort
+			};
 			
-			if(Object.keys(find).length == 1 && find._id && typeof find._id == "string"){
-				conn.get(find._id, (err, result) => {
-					if(err){
-						resolve(new Response(false, lang.searchNoResults));
-					}else{
-						resolve(new Response(true, result));
-					}
-				});
-			}else{
-				const query = {
-					selector : {...find, collection : this.table},
-					limit: 1
-				};
-				
-				conn.find(query, (err, result) => {
-					if(err){
-						reject(new Response(false, lang.searchError));
-					}else{
-						if(result.docs.length > 0)
-							resolve(new Response(true, result.docs[0]));
-						else
-							resolve(new Response(false, lang.searchNoResults));
-					}
-				});
-			}
+			conn.getCollection(this.collection)
+			.then(col => col.findOne(find, options))
+			.then( result => {
+				if(result){
+					resolve(new Response(true, result));
+				}else{
+					resolve(new Response(false, lang.searchNoResults));
+				}
+			})
+			.catch( error => {
+				console.log(error);
+				reject(false, Lang.searchError);
+			});
 		});
 	}
 }

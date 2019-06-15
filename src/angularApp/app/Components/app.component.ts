@@ -419,7 +419,7 @@ export class AppComponent {
 		private _Compresor : CompresorService, 
 		public Notification : NotificationService, 
 		private _Websocket : WebsocketService, 
-		private _Visibility : VisibilityService, 
+		private _Visibility : VisibilityService,
 		private _Identity : IdentityService, 
 		private _GeoLocation : GeoLocationService
 	) {

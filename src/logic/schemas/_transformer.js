@@ -1,4 +1,22 @@
-const privateKeys = ["linkedWith", "insertable", "updateable", "searchable", "inline", "required", "extraFilter", "pattern"];
+const privateKeys = [
+	"_$linkedWith",
+	
+	"_$insertable",
+	"_$updateable",
+	"_$selfupdateable",
+	"_$searchable",
+	
+	"_$insertRequired",
+	"_$updateRequired",
+	"_$selfupdateRequired",
+	
+	"_$inline",
+	"_$required",
+	"_$extraFilter",
+	"_$index",
+	"_$indexUnique",
+	"_$pattern"
+];
 
 const queryActions = {
 	integer: ["lt", "lte", "gt", "gte", "ne", "exists"],
@@ -19,19 +37,19 @@ const clean = function(body){
 const basic = function(schema){
 	const data = {};
 	for(let key in schema){
-		if(!schema[key].hasOwnProperty("private"))
+		if(!schema[key].hasOwnProperty("_$private"))
 			data[key] = clean({...schema[key]});
 	}
 	return data;
 };
 
-const process = function(schema, validKey, requiredKey = 'null', params = {}){
+const process = function(schema, validKey, requiredKey = null, params = {}){
 	const data = {
 		querystring : {
 			type: "object",
 			additionalProperties: false,
 			properties : {
-				lang: {
+				$lang: {
 					type: "string", 
 					default: "es"
 				}
@@ -59,7 +77,7 @@ const process = function(schema, validKey, requiredKey = 'null', params = {}){
 	for(let key in schema){
 		if(schema[key].hasOwnProperty(validKey)){
 			data.body.properties[key] = clean({...schema[key]});
-			if(schema[key].hasOwnProperty(requiredKey))
+			if(requiredKey && schema[key].hasOwnProperty(requiredKey))
 				data.body.required.push(key);
 		}
 	}
@@ -67,7 +85,7 @@ const process = function(schema, validKey, requiredKey = 'null', params = {}){
 };
 
 const create = function(schema, params = {}){
-	return process(schema, "insertable", "insertRequired", params);
+	return process(schema, "_$insertable", "_$insertRequired", params);
 };
 
 const update = function(
@@ -78,23 +96,23 @@ params = {
 	properties : {
 		id: {
 			type: "string", 
-			pattern: "^[0-9a-zA-Z-]{1,}$"
+			pattern: "^[0-9a-fA-F]{24}$"
 		}
 	}
 })
 {
-	return process(schema, "updateable", "updateRequired", params);
+	return process(schema, "_$updateable", "_$updateRequired", params);
 };
 
 const updateSelf = function(schema){
-	return process(schema, "selfUpdateable", "selfUpdateRequired");
+	return process(schema, "_$selfupdateable", "_$selfupdateRequired");
 };
 
 const toResponseSingle = function(schema){
 	return {
 		type: "object",
 		additionalProperties: false,
-		required : ["success"],
+		_$required : ["success"],
 		properties: {
 			success: { 
 				type: "boolean"
@@ -122,7 +140,7 @@ const toResponseSingle = function(schema){
 const toResponseArray = function(schema){
 	return {
 		type: "object",
-		required : ["success"],
+		_$required : ["success"],
 		additionalProperties: false,
 		properties: {
 			success: {
@@ -155,7 +173,7 @@ const remove = function(){
 			type: "object",
 			additionalProperties: false,
 			properties : {
-				lang: {
+				$lang: {
 					type: "string", 
 					default: "es"
 				}
@@ -167,7 +185,7 @@ const remove = function(){
 			properties : {
 				id: {
 					type: "string", 
-					pattern: "^[0-9a-zA-Z-]{1,}$"
+					pattern: "^[0-9a-fA-F]{24}$"
 				}
 			}
 		},
@@ -209,7 +227,7 @@ const get = function(schema){
 			type: "object",
 			additionalProperties: false,
 			properties : {
-				lang: {
+				$lang: {
 					type: "string", 
 					default: "es"
 				}
@@ -221,7 +239,7 @@ const get = function(schema){
 			properties : {
 				id: {
 					type: "string", 
-					pattern: "^[0-9a-zA-Z-]{1,}$"
+					pattern: "^[0-9a-fA-F]{24}$"
 				}
 			}
 		},
@@ -267,9 +285,11 @@ const retrieve = function(schema){
 					}
 				}, 
 				$projection: {
-					type: "array", 
-					items: {
-						type: "string"
+					type: "object",
+					additionalProperties: false,
+					default: {},
+					properties: {
+						
 					}
 				}
 			}
@@ -279,12 +299,13 @@ const retrieve = function(schema){
 		}
 	};
 	for(let key in schema){
-		if(schema[key].hasOwnProperty("searchable")){
+		if(schema[key].hasOwnProperty("_$searchable")){
 			const clone = clean({...schema[key]});
-			data.querystring.properties/*.query.properties*/[key] = clone;
+			delete clone.default;
+			data.querystring.properties[key] = clone;
 			if(queryActions.hasOwnProperty(clone.type))
 				for(const kkey of queryActions[clone.type])
-					data.querystring.properties/*.query.properties*/[`${key}_${kkey}`] = clone;
+					data.querystring.properties[`${key}_${kkey}`] = clone;
 		}
 	}
 	return data;

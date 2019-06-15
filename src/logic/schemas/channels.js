@@ -1,22 +1,45 @@
 const transformer = require('./_transformer');
+const objectCopy  = require("fast-copy").default;
 
 const EntitySchema = {
 	_id: {
 		type: "string",
-		$filter: "uuid",
+		_$filter: "objectid",
 		_$label: "id",
-		_$displayAs: "text",
-		mainIndex: true,
-	},
-	type: {
-		type: "string",
-		default: "feature"
+		_$displayAs: "text"
 	},
 	channelName: {
 		type: "string"
 	},
+	ips: {
+		type: "array",
+		_$index: 1,
+		_$insertable : true,
+		_$updateable : true,
+		_$searchable : true,
+		_$private : true,
+		items : {
+			type : "string"
+		}
+	},
+	state: {
+		type: "object",
+		_$insertable : true,
+		_$searchable : true,
+		required: ["cid"],
+		properties: {
+			cid: {
+				type: "string"
+			}
+		}
+	},
 	geometry: {
 		type: "object",
+		_$insertable : true,
+		_$updateable : true,
+		_$searchable : true,
+		_$private : true,
+		_$index: "2dsphere",
 		required: ["type", "coordinates"],
 		properties: {
 			type: {
@@ -25,47 +48,63 @@ const EntitySchema = {
 			coordinates: {
 				type: "array",
 				items: {
-					type: "number"
+					type: "array",
+					items: {
+						type: "number"
+					}					
 				}
 			}
 		}
 	},
 	created: {
 		type: "integer",
+		_$filter: "date",
 		_$label: "userCreated",
 		_$displayAs: "date"
 	}
 };
 
-/*const InsertSchema = transformer.create({...EntitySchema});
-const UpdateSchema = transformer.update({...EntitySchema});
-const UpdateSelfSchema = transformer.updateSelf({...EntitySchema});
-const RemoveSchema = transformer.remove({...EntitySchema});*/
-const GetSchema = transformer.get({...EntitySchema});
-const RetrieveSchema = transformer.retrieve({...EntitySchema});
+const InsertSchema = transformer.create(objectCopy(EntitySchema));
+const GetSchema = transformer.get(objectCopy(EntitySchema));
+const RetrieveSchema = transformer.retrieve(objectCopy(EntitySchema));
 
 const routes = [
 	{
 		url: "/search",
 		method: "GET",
-		schema: {...RetrieveSchema},
-		entityFuntion: "doSelectFull"
+		schema: objectCopy(RetrieveSchema),
+		entityFuntion: "MakeSearch",
+		privs: [
+			{
+				method: "isLogged",
+				messageKey: "youMustLogIn"
+			}
+		]
 	},
 	{
 		url: "/id/:id",
 		method: "GET",
-		schema: {...GetSchema},
-		entityFuntion: "doSelectOneFull"
+		schema: objectCopy(GetSchema),
+		entityFuntion: "MakeSelectOne",
+		privs: []
+	},
+	{
+		url: "/",
+		method: "POST",
+		schema: objectCopy(InsertSchema),
+		entityFuntion: "MakeInsertOne",
+		privs: [
+			{
+				method: "isLogged",
+				messageKey: "youMustLogIn"
+			}
+		]
 	}
 ];
 
 module.exports = {
-	EntitySchema : {...EntitySchema},
+	EntitySchema : objectCopy(EntitySchema),
 	routes,
-	/*InsertSchema: {...InsertSchema},
-	UpdateSchema: {...UpdateSchema},
-	UpdateSelfSchema: {...UpdateSelfSchema},
-	RemoveSchema: {...RemoveSchema},*/
 	GetSchema: {...GetSchema},
 	RetrieveSchema: {...RetrieveSchema}
 };

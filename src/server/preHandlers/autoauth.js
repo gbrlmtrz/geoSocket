@@ -1,16 +1,13 @@
-const {User} = require('../../logic/Entities'),
-	Response = require('../../logic/Entities/_Response');
+const Users = require('../../logic/Entities').Users.instance;
+const Response = require('../../logic/Entities/_Response');
 
 const autoauth = function(req, reply, next){
-	let jwtoken;
+	req.user = {logged : false};
 	
-	if(req.headers.authorization)
-		jwtoken = req.headers.authorization;
-	
-	req.user = false;
-	if(jwtoken){
+	if(req.headers.authorization){
+		const jwtoken = req.headers.authorization;
 		
-		User.checkHash(jwtoken)
+		Users.checkHash(jwtoken, req.lang)
 		.then(hashChecked)
 		.catch(onError);
 		

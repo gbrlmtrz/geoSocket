@@ -4,6 +4,10 @@
 		"port": 6379,
 		"host": "127.0.0.1"
 	},
+	"Users": {
+		"JWTSecret" : "sixdegrees1992",
+		"JWTLifeInDays" : 365
+	},
 	"socketServer": {
 		"port": 8082,
 		"heartbeatInterval": 30000
@@ -12,7 +16,7 @@
 		"emitConnects": true,
 		"keepOneConnectionPerPC": true,
 		"emitDisconnects": true,
-		"radius": 5000,
+		"radius": 500,
 		"maxClients": 5,
 		"wantedClients": 3,
 		"clientsToDissolve": 1,
@@ -21,6 +25,10 @@
 	},
 	"google": {
 		"mapsapikey": "AIzaSyAHTy8J3F0D27k1sSGyb8x9jRWc7Za6quY"
+	},
+	"mongoAtlas" : {
+		"dbName" : "sixdegrees",
+		"url" : "mongodb+srv:\/\/sidegrees:4OhXv4SCLpw8U9Dn@sixdegrees-dqmgd.mongodb.net/test?retryWrites=true&w=majority"
 	},
 	"cloudant": {
 		"account": "f056fa64-1a45-448e-9243-5964a282ed40-bluemix",
